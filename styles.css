@@ -149,8 +149,8 @@ button:hover {
 
 .destination-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     padding: 10px;
     border-bottom: 1px solid #eee;
     position: relative;
@@ -161,7 +161,7 @@ button:hover {
 }
 
 .destination-info {
-    flex: 1;
+    flex-grow: 1;
 }
 
 .destination-name {
@@ -240,4 +240,131 @@ footer {
     #map {
         height: 300px;
     }
+}
+
+/* 出發時間設定區域 */
+.departure-time, .daily-hours {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.departure-time label, .daily-hours label {
+    margin-right: 5px;
+    font-weight: bold;
+}
+
+.departure-time input[type="date"],
+.departure-time input[type="time"],
+.daily-hours input[type="number"] {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.remove-btn {
+    background-color: #ff5252;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    margin-left: 10px;
+}
+
+.remove-btn:hover {
+    background-color: #ff0000;
+}
+
+.daily-hours span {
+    font-weight: normal;
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.daily-hours input[type="number"] {
+    width: 60px;
+}
+
+.day-settings {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-left: 20px;
+    font-size: 0.9em;
+    color: #666;
+}
+
+.day-settings span {
+    white-space: nowrap;
+}
+
+.day-settings-button {
+    padding: 5px 10px;
+    font-size: 0.8em;
+    background-color: #4a89dc;
+}
+
+.day-settings-button:hover {
+    background-color: #3a79cc;
+}
+
+.settings-dialog-content {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.settings-form {
+    margin-top: 15px;
+}
+
+.settings-row {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+}
+
+.settings-row label {
+    width: 150px;
+    font-weight: bold;
+}
+
+.settings-row input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.settings-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.settings-actions button {
+    padding: 8px 15px;
+}
+
+#save-day-settings {
+    background-color: #4CAF50;
+}
+
+#cancel-day-settings {
+    background-color: #f44336;
+}
+
+#reset-day-settings {
+    background-color: #9e9e9e;
 }

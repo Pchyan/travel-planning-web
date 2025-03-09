@@ -4,14 +4,26 @@ let destinations = [];
 let map = null;
 let markers = [];
 let polyline = null;
+let departureDate = null;
+let departureTime = "09:00";  // 默認出發時間為早上9點
+let maxDailyHours = 8;  // 每天的最大行程時間，預設為8小時
+
+// 存儲每日特定的時間設置和結束地點
+let dailySettings = []; // 格式: [{dayIndex: 0, departureTime: "09:00", maxHours: 8}, ...]
+let dailyEndPoints = []; // 格式: [{dayIndex: 0, endPoint: {name, coordinates, stayDuration}}, ...]
+
+// 位置緩存：儲存已經使用經緯度輸入過的位置名稱和坐標
+let locationCache = {}; // 格式: {位置名稱: [緯度, 經度]}
 
 // 本地儲存的鍵名
 const STORAGE_KEY = 'travel_planner_data';
+const SAVED_ITINERARIES_KEY = 'saved_itineraries';
+const LOCATION_CACHE_KEY = 'location_cache';
+const LOCATION_MANAGER_ID = 'location-manager-dialog';
 
 // 當前選擇的國家和城市
 let currentCountry = '台灣';
 let currentCity = '台北';
-
 
 // 每天的最大行程时间（小时）
 const MAX_DAILY_HOURS = 8;
@@ -260,6 +272,11 @@ function initEventListeners() {
         toggleCoordinatesInputMode();
     });
     
+    // 管理經緯度位置
+    document.getElementById('manage-coordinates').addEventListener('click', function() {
+        manageLocationCache();
+    });
+    
     // 設置經緯度
     document.getElementById('set-coordinates').addEventListener('click', function() {
         const latInput = document.getElementById('latitude').value.trim();
@@ -280,6 +297,43 @@ function initEventListeners() {
         }
     });
     
+    // 設定出發時間
+    document.getElementById('set-departure-time').addEventListener('click', () => {
+        const dateInput = document.getElementById('departure-date');
+        const timeInput = document.getElementById('departure-time');
+        
+        departureDate = dateInput.value;
+        departureTime = timeInput.value || "09:00";  // 如果用戶未輸入時間，則使用默認值
+        
+        // 顯示確認訊息
+        if (departureDate) {
+            alert(`已設定出發日期: ${departureDate}, 時間: ${departureTime}`);
+        } else {
+            alert(`已設定出發時間: ${departureTime} (未設定日期)`);
+        }
+        
+        // 更新行程顯示
+        updateItinerary();
+    });
+    
+    // 設定每日行程時間
+    document.getElementById('set-daily-hours').addEventListener('click', () => {
+        const hoursInput = document.getElementById('max-daily-hours');
+        const newHours = parseFloat(hoursInput.value);
+        
+        if (!isNaN(newHours) && newHours > 0 && newHours <= 24) {
+            // 更新每日行程時間
+            maxDailyHours = newHours;
+            alert(`已設定每日行程時間: ${maxDailyHours} 小時`);
+            
+            // 重新分配行程
+            updateItinerary();
+        } else {
+            alert('請輸入有效的時間（1-24小時）');
+            hoursInput.value = maxDailyHours; // 重置為當前值
+        }
+    });
+    
     // 儲存行程按鈕
     document.getElementById('save-itinerary').addEventListener('click', function() {
         if (!startingPoint) {
@@ -293,7 +347,7 @@ function initEventListeners() {
         }
         
         // 獲取已儲存的所有行程
-        let savedItineraries = JSON.parse(localStorage.getItem('saved_itineraries') || '{}');
+        let savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
         
         // 獲取最後一次使用的行程名稱
         let lastItineraryName = localStorage.getItem('last_itinerary_name') || '我的行程';
@@ -306,23 +360,35 @@ function initEventListeners() {
             return;
         }
         
+        // 儲存當前行程名稱，方便下次使用
+        localStorage.setItem('last_itinerary_name', itineraryName);
+        
         // 儲存當前行程
         savedItineraries[itineraryName] = {
             startingPoint: startingPoint,
             destinations: destinations,
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
+            departureDate: departureDate,
+            departureTime: departureTime,
+            maxDailyHours: maxDailyHours,
+            dailySettings: dailySettings,
+            dailyEndPoints: dailyEndPoints,
+            locationCache: locationCache  // 同時保存位置緩存
         };
         
         // 更新本地儲存
-        localStorage.setItem('saved_itineraries', JSON.stringify(savedItineraries));
-        
-        // 儲存最後使用的行程名稱
-        localStorage.setItem('last_itinerary_name', itineraryName);
+        localStorage.setItem(SAVED_ITINERARIES_KEY, JSON.stringify(savedItineraries));
         
         // 同時更新當前行程
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
             startingPoint: startingPoint,
-            destinations: destinations
+            destinations: destinations,
+            departureDate: departureDate,
+            departureTime: departureTime,
+            maxDailyHours: maxDailyHours,
+            dailySettings: dailySettings,
+            dailyEndPoints: dailyEndPoints,
+            locationCache: locationCache
         }));
         
         console.log(`行程「${itineraryName}」已儲存到本地`);
@@ -333,16 +399,22 @@ function initEventListeners() {
     
     // 讀取行程按鈕
     document.getElementById('load-itinerary').addEventListener('click', function() {
-        const success = loadItinerary();
+        loadItinerary();
     });
     
     // 管理行程按鈕
     document.getElementById('manage-itinerary').addEventListener('click', function() {
-        window.location.href = 'manage-itineraries.html';
+        manageItineraries();
+    });
     
-        if (!success) {
-            alert('沒有找到已儲存的行程！');
-        }
+    // 匯出資料
+    document.getElementById('export-data').addEventListener('click', function() {
+        exportData();
+    });
+    
+    // 匯入資料
+    document.getElementById('import-data').addEventListener('click', function() {
+        importData();
     });
 }
 
@@ -381,7 +453,17 @@ async function addDestination(location) {
     }
     
     try {
-        const coordinates = await geocodeLocation(location);
+        let coordinates;
+        
+        // 檢查緩存中是否有該位置的經緯度資料
+        if (locationCache[location]) {
+            // 使用緩存的經緯度資料
+            coordinates = locationCache[location];
+            console.log(`使用緩存中的經緯度資料: ${location} -> [${coordinates[0]}, ${coordinates[1]}]`);
+        } else {
+            // 執行地理編碼獲取經緯度
+            coordinates = await geocodeLocation(location);
+        }
         
         // 根據經緯度識別當前位置的國家和城市
         const locationInfo = identifyLocation(coordinates[0], coordinates[1]);
@@ -402,9 +484,6 @@ async function addDestination(location) {
             city: currentCity
         });
         
-        // 优化行程顺序
-        optimizeItinerary();
-        
         // 更新地图
         updateMap();
         
@@ -421,9 +500,6 @@ async function addDestination(location) {
 // 删除景点
 function removeDestination(index) {
     destinations.splice(index, 1);
-    
-    // 优化行程顺序
-    optimizeItinerary();
     
     // 更新地图
     updateMap();
@@ -548,12 +624,27 @@ function distributeItineraryToDays() {
     let currentDay = [];
     let currentDayDuration = 0;
     let lastDayLastDestination = null; // 記錄前一天最後的景點
+    let currentDayStartTime = null; // 當天的起始時間
+    let currentDayIndex = 0; // 當前是第幾天
+    
+    // 取得第一天的設定
+    let currentDaySettings = getDaySettings(0);
+    
+    // 第一天的起始時間
+    currentDayStartTime = new Date();
+    currentDayStartTime.setHours(
+        currentDaySettings.departureHours, 
+        currentDaySettings.departureMinutes, 
+        0, 0
+    );
     
     // 添加發出點作為第一天起點
     currentDay.push({
         ...startingPoint,
         isStartingPoint: true,
-        transportationFromPrevious: null
+        transportationFromPrevious: null,
+        arrivalTime: formatTime(currentDayStartTime), // 出發點的到達時間就是出發時間
+        stayDuration: 0 // 確保出發點不計入停留時間
     });
     
     // 遍歷所有目的地
@@ -567,61 +658,128 @@ function distributeItineraryToDays() {
             destination.coordinates
         );
         
-        // 計算當前景點總時長（交通時間 + 停留時間）
-        const totalTime = transportation.time + destination.stayDuration;
+        // 計算加上當前景點後的總時間
+        const totalTimeWithCurrentDestination = currentDayDuration + transportation.time + destination.stayDuration;
         
-        // 檢查是否超過每天最大行程時間
-        if (currentDayDuration + totalTime > MAX_DAILY_HOURS) {
-            // 如果超過，保存當前景點作為下一天的起點
-            lastDayLastDestination = previousPoint;
+        // 檢查當前天是否有設定結束地點
+        const dayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === currentDayIndex);
+        
+        // 檢查是否是當天的最後一個景點
+        const isLastDestination = 
+            (i === destinations.length - 1) || 
+            (totalTimeWithCurrentDestination > currentDaySettings.maxHours) ||
+            // 如果當前景點是設定的結束地點，則視為當天的最後一個景點
+            (dayEndPoint && destination.name === dayEndPoint.endPoint.name && 
+             destination.coordinates[0] === dayEndPoint.endPoint.coordinates[0] && 
+             destination.coordinates[1] === dayEndPoint.endPoint.coordinates[1]);
+        
+        // 記錄時間計算結果，幫助調試
+        console.log(`景點 ${destination.name} - 當前天數: ${currentDayIndex+1}, 當前累積時間: ${currentDayDuration}, 交通時間: ${transportation.time}, 停留時間: ${destination.stayDuration}, 總計: ${totalTimeWithCurrentDestination}, 最大限制: ${currentDaySettings.maxHours}, 是否是結束地點: ${dayEndPoint && destination.name === dayEndPoint.endPoint.name}, 是否是最後一個景點: ${isLastDestination}`);
+        
+        // 如果是當天最後一個景點，暫時不計入停留時間
+        const effectiveStayDuration = isLastDestination ? 0 : destination.stayDuration;
+        
+        // 計算當前景點總時長（交通時間 + 停留時間）
+        const totalTime = transportation.time + effectiveStayDuration;
+        
+        // 計算預計到達時間
+        let arrivalTime = new Date(currentDayStartTime);
+        
+        if (previousPoint.isStartingPoint) {
+            // 如果前一個點是出發點，直接加上交通時間計算第一個景點的到達時間
+            const transportHours = Math.floor(transportation.time);
+            const transportMinutes = Math.round((transportation.time - transportHours) * 60);
+            arrivalTime.setHours(arrivalTime.getHours() + transportHours);
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + transportMinutes);
+        } else {
+            // 從上一個點的到達時間開始計算
+            const prevArrivalTimeParts = previousPoint.arrivalTime.split(':').map(Number);
+            arrivalTime.setHours(prevArrivalTimeParts[0], prevArrivalTimeParts[1], 0, 0);
             
-            // 創建新的一天
-            days.push(currentDay);
+            // 加上上一個點的停留時間
+            const prevStayHours = Math.floor(previousPoint.stayDuration);
+            const prevStayMinutes = Math.round((previousPoint.stayDuration - prevStayHours) * 60);
+            arrivalTime.setHours(arrivalTime.getHours() + prevStayHours);
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + prevStayMinutes);
             
-            // 新的一天從前一天最後一個景點開始，而不是出發點
-            currentDay = [];
+            // 加上交通時間
+            const transportHours = Math.floor(transportation.time);
+            const transportMinutes = Math.round((transportation.time - transportHours) * 60);
+            arrivalTime.setHours(arrivalTime.getHours() + transportHours);
+            arrivalTime.setMinutes(arrivalTime.getMinutes() + transportMinutes);
+        }
+        
+        // 檢查是否需要進入下一天
+        const needNextDay = 
+            (totalTimeWithCurrentDestination > currentDaySettings.maxHours) || 
+            // 如果這個景點是結束地點，且不是最後一個景點，則下一個景點需要進入下一天
+            (dayEndPoint && destination.name === dayEndPoint.endPoint.name && 
+             destination.coordinates[0] === dayEndPoint.endPoint.coordinates[0] && 
+             destination.coordinates[1] === dayEndPoint.endPoint.coordinates[1] && 
+             i < destinations.length - 1);
+        
+        if (needNextDay) {
+            // 如果超過當天時間限制或者是設定的結束地點，進入下一天
             
-            // 如果有前一天的最後景點，則將其作為新一天的第一個點
-            if (lastDayLastDestination) {
-                // 將前一天最後的景點複製到新的一天作為起點
-                currentDay.push({
-                    ...lastDayLastDestination,
-                    isStartingPoint: false,
-                    transportationFromPrevious: null
-                });
-            } else {
-                // 如果沒有前一天的景點（理論上不應該發生），使用出發點
-                currentDay.push({
-                    ...startingPoint,
-                    isStartingPoint: true,
-                    transportationFromPrevious: null
-                });
-            }
-            
-            // 重置當天行程時間，但不計算第一個點的停留時間（因為已經在前一天計算過）
-            currentDayDuration = 0;
-            
-            // 重新計算交通時間，因為起點變了
-            const newTransportation = determineTransportation(
-                currentDay[0].coordinates,
-                destination.coordinates
-            );
-            
-            // 添加目的地到當前天，使用新計算的交通方式
+            // 添加當前景點到今天的行程（作為今天的最後一個景點）
             currentDay.push({
                 ...destination,
                 isStartingPoint: false,
-                transportationFromPrevious: newTransportation
+                transportationFromPrevious: transportation,
+                arrivalTime: formatTime(arrivalTime),
+                effectiveStayDuration: 0, // 結束地點不計停留時間
+                isEndPoint: dayEndPoint && destination.name === dayEndPoint.endPoint.name
             });
             
-            // 更新當天行程時間
-            currentDayDuration += newTransportation.time + destination.stayDuration;
+            // 更新當天行程時間（只計算交通時間，不計算停留時間）
+            currentDayDuration += transportation.time;
+            
+            // 記錄這個點作為下一天的起點
+            lastDayLastDestination = destination;
+            
+            // 將當前天加入到days陣列
+            days.push(currentDay);
+            
+            // 進入下一天
+            currentDay = [];
+            currentDayIndex++;
+            
+            // 獲取下一天的設定
+            currentDaySettings = getDaySettings(currentDayIndex);
+            
+            // 下一天的起始時間
+            currentDayStartTime = new Date();
+            currentDayStartTime.setHours(
+                currentDaySettings.departureHours,
+                currentDaySettings.departureMinutes, 
+                0, 0
+            );
+            
+            // 將前一天的最後一個景點作為下一天的起點
+            currentDay.push({
+                ...lastDayLastDestination,
+                isStartingPoint: false,
+                transportationFromPrevious: null,
+                arrivalTime: formatTime(currentDayStartTime),
+                stayDuration: 0 // 確保每一天的第一個點不計入停留時間
+            });
+            
+            // 重置當天行程時間
+            currentDayDuration = 0;
+            
+            // 如果這是一個結束地點且不是所有景點的最後一個，跳到下一個景點
+            if (dayEndPoint && destination.name === dayEndPoint.endPoint.name && i < destinations.length - 1) {
+                continue;
+            }
         } else {
-            // 添加目的地到當前天
+            // 正常添加景點到當前天
             currentDay.push({
                 ...destination,
                 isStartingPoint: false,
-                transportationFromPrevious: transportation
+                transportationFromPrevious: transportation,
+                arrivalTime: formatTime(arrivalTime),
+                effectiveStayDuration: effectiveStayDuration,
+                isEndPoint: dayEndPoint && destination.name === dayEndPoint.endPoint.name
             });
             
             // 更新當天行程時間
@@ -635,6 +793,37 @@ function distributeItineraryToDays() {
     }
     
     return days;
+}
+
+// 獲取特定日期的設定，如果沒有則使用默認值
+function getDaySettings(dayIndex) {
+    // 查找這一天的特定設定
+    const daySetting = dailySettings.find(setting => setting.dayIndex === dayIndex);
+    
+    if (daySetting) {
+        // 如果有特定設定，解析出發時間
+        const [departureHours, departureMinutes] = daySetting.departureTime.split(':').map(Number);
+        return {
+            departureHours: departureHours,
+            departureMinutes: departureMinutes,
+            maxHours: daySetting.maxHours
+        };
+    } else {
+        // 如果沒有特定設定，使用全局設定
+        const [defaultHours, defaultMinutes] = departureTime.split(':').map(Number);
+        return {
+            departureHours: defaultHours,
+            departureMinutes: defaultMinutes,
+            maxHours: maxDailyHours
+        };
+    }
+}
+
+// 格式化時間為 HH:MM 格式
+function formatTime(date) {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
 }
 
 // 更新地图
@@ -714,180 +903,163 @@ function fitMapToMarkers() {
     map.fitBounds(group.getBounds().pad(0.1)); // 添加一些填充
 }
 
-// 儲存行程到本地儲存
-function saveItinerary() {
-    if (!startingPoint) {
-        return; // 沒有出發點，不需要儲存
-    }
-    
-    // 彈出對話框讓用戶輸入行程名稱
-    const itineraryName = prompt('請輸入行程名稱：', '我的行程');
-    
-    if (!itineraryName) {
-        alert('請輸入有效的行程名稱！');
-        return;
-    }
-    
-    // 獲取已儲存的所有行程
-    let savedItineraries = JSON.parse(localStorage.getItem('saved_itineraries') || '{}');
-    
-    // 儲存當前行程
-    savedItineraries[itineraryName] = {
-        startingPoint: startingPoint,
-        destinations: destinations,
-        savedAt: new Date().toISOString()
-    };
-    
-    // 更新本地儲存
-    localStorage.setItem('saved_itineraries', JSON.stringify(savedItineraries));
-    
-    // 同時更新當前行程
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        startingPoint: startingPoint,
-        destinations: destinations
-    }));
-    
-    console.log(`行程「${itineraryName}」已儲存到本地`);
-    
-    // 顯示儲存成功提示
-    alert(`行程「${itineraryName}」已成功儲存！`);
-}
-
 // 從本地儲存讀取行程
 function loadItinerary() {
-    // 檢查是否有從管理頁面選擇的行程
-    const selectedItineraryName = sessionStorage.getItem('selected_itinerary');
-    if (selectedItineraryName) {
-        // 清除選擇，避免重複載入
-        sessionStorage.removeItem('selected_itinerary');
-        
-        // 獲取已儲存的所有行程
-        const savedItineraries = JSON.parse(localStorage.getItem('saved_itineraries') || '{}');
-        
-        // 檢查選擇的行程是否存在
-        if (savedItineraries[selectedItineraryName]) {
-            try {
-                // 恢復出發點和目的地
-                startingPoint = savedItineraries[selectedItineraryName].startingPoint;
-                destinations = savedItineraries[selectedItineraryName].destinations;
-                
-                // 更新地圖和行程
-                updateMap();
-                updateItinerary();
-                
-                // 啟用添加景點功能
-                document.getElementById('new-destination').disabled = false;
-                document.getElementById('add-destination').disabled = false;
-                
-                // 更新出發點輸入框
-                if (startingPoint) {
-                    document.getElementById('starting-point').value = startingPoint.name;
-                }
-                
-                console.log(`已載入行程「${selectedItineraryName}」`);
-                alert(`已成功載入行程「${selectedItineraryName}」！`);
-                return true;
-            } catch (error) {
-                console.error('讀取儲存的行程時出錯:', error);
-                return false;
-            }
-        }
-    }
-    
-    // 如果沒有從管理頁面選擇的行程，則顯示選擇對話框
-    // 獲取已儲存的所有行程
-    const savedItineraries = JSON.parse(localStorage.getItem('saved_itineraries') || '{}');
-    
-    // 檢查是否有已儲存的行程
+    const savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
     const itineraryNames = Object.keys(savedItineraries);
     
     if (itineraryNames.length === 0) {
-        // 嘗試讀取舊版本的單一行程
-        const savedData = localStorage.getItem(STORAGE_KEY);
-        
-        if (savedData) {
-            try {
-                const data = JSON.parse(savedData);
-                
-                // 恢復出發點和目的地
-                startingPoint = data.startingPoint;
-                destinations = data.destinations;
-                
-                // 更新地圖和行程
-                updateMap();
-                updateItinerary();
-                
-                // 啟用添加景點功能
-                document.getElementById('new-destination').disabled = false;
-                document.getElementById('add-destination').disabled = false;
-                
-                // 更新出發點輸入框
-                if (startingPoint) {
-                    document.getElementById('starting-point').value = startingPoint.name;
-                }
-                
-                console.log('已從本地儲存讀取行程');
-                return true;
-            } catch (error) {
-                console.error('讀取儲存的行程時出錯:', error);
-                return false;
-            }
-        }
-        
-        return false;
+        alert('沒有保存的行程');
+        return;
     }
     
-    // 創建行程選擇列表
-    let itineraryList = '請選擇要載入的行程：\n';
+    // 創建選擇對話框
+    const selectDialog = document.createElement('div');
+    selectDialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
     
-    itineraryNames.forEach((name, index) => {
-        const savedDate = new Date(savedItineraries[name].savedAt);
-        const formattedDate = savedDate.toLocaleString('zh-TW');
-        itineraryList += `${index + 1}. ${name} (儲存於 ${formattedDate})\n`;
+    const dialogContent = document.createElement('div');
+    dialogContent.style.cssText = `
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        max-width: 500px;
+        width: 100%;
+        max-height: 80vh;
+        overflow-y: auto;
+    `;
+    
+    dialogContent.innerHTML = `
+        <h3>選擇行程</h3>
+        <ul style="list-style: none; padding: 0;">
+            ${itineraryNames.map((name, index) => {
+                const item = savedItineraries[name];
+                const savedDate = new Date(item.savedAt).toLocaleString('zh-TW');
+                return `
+                <li style="margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                    <strong>${name}</strong>
+                    <div>建立日期: ${savedDate}</div>
+                    <div>出發點: ${item.startingPoint.name}</div>
+                    <div>景點數: ${item.destinations.length}</div>
+                    ${item.departureDate ? `<div>出發日期: ${item.departureDate}</div>` : ''}
+                    ${item.departureTime ? `<div>出發時間: ${item.departureTime}</div>` : ''}
+                    ${item.maxDailyHours ? `<div>每日行程時間: ${item.maxDailyHours} 小時</div>` : ''}
+                    <div style="margin-top: 10px;">
+                        <button class="load-btn" data-name="${name}">讀取</button>
+                        <button class="delete-btn" data-name="${name}">刪除</button>
+                    </div>
+                </li>
+                `;
+            }).join('')}
+        </ul>
+        <div style="text-align: right; margin-top: 20px;">
+            <button id="cancel-load">取消</button>
+        </div>
+    `;
+    
+    selectDialog.appendChild(dialogContent);
+    document.body.appendChild(selectDialog);
+    
+    // 取消按鈕
+    document.getElementById('cancel-load').addEventListener('click', () => {
+        document.body.removeChild(selectDialog);
     });
     
-    // 顯示行程選擇對話框
-    const selectedIndex = prompt(itineraryList, '1');
-    
-    if (selectedIndex === null) {
-        return false; // 用戶取消選擇
-    }
-    
-    const index = parseInt(selectedIndex) - 1;
-    
-    if (isNaN(index) || index < 0 || index >= itineraryNames.length) {
-        alert('請輸入有效的行程編號！');
-        return false;
-    }
-    
-    const selectedName = itineraryNames[index];
-    const selectedItinerary = savedItineraries[selectedName];
-    
-    try {
-        // 恢復出發點和目的地
-        startingPoint = selectedItinerary.startingPoint;
-        destinations = selectedItinerary.destinations;
-        
-        // 更新地圖和行程
-        updateMap();
-        updateItinerary();
-        
-        // 啟用添加景點功能
-        document.getElementById('new-destination').disabled = false;
-        document.getElementById('add-destination').disabled = false;
-        
-        // 更新出發點輸入框
-        if (startingPoint) {
+    // 讀取行程
+    document.querySelectorAll('.load-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const name = btn.dataset.name;
+            const selectedItinerary = savedItineraries[name];
+            
+            startingPoint = selectedItinerary.startingPoint;
+            destinations = selectedItinerary.destinations;
+            
+            // 讀取出發時間信息
+            departureDate = selectedItinerary.departureDate || null;
+            departureTime = selectedItinerary.departureTime || "09:00";
+            
+            // 讀取每日行程時間
+            if (selectedItinerary.maxDailyHours) {
+                maxDailyHours = selectedItinerary.maxDailyHours;
+                document.getElementById('max-daily-hours').value = maxDailyHours;
+            }
+            
+            // 讀取每日特定設定
+            if (selectedItinerary.dailySettings && Array.isArray(selectedItinerary.dailySettings)) {
+                dailySettings = selectedItinerary.dailySettings;
+            } else {
+                dailySettings = []; // 如果沒有每日設定，重置為空
+            }
+            
+            // 讀取每日結束地點設定
+            if (selectedItinerary.dailyEndPoints && Array.isArray(selectedItinerary.dailyEndPoints)) {
+                dailyEndPoints = selectedItinerary.dailyEndPoints;
+            } else {
+                dailyEndPoints = []; // 如果沒有結束地點設定，重置為空
+            }
+            
+            // 更新界面
             document.getElementById('starting-point').value = startingPoint.name;
-        }
-        
-        console.log(`已載入行程「${selectedName}」`);
-        alert(`已成功載入行程「${selectedName}」！`);
-        return true;
-    } catch (error) {
-        console.error('讀取儲存的行程時出錯:', error);
-        return false;
-    }
+            
+            // 如果有出發日期和時間，更新相應的輸入框
+            if (departureDate) {
+                document.getElementById('departure-date').value = departureDate;
+            }
+            if (departureTime) {
+                document.getElementById('departure-time').value = departureTime;
+            }
+            
+            // 启用添加景点功能
+            document.getElementById('new-destination').disabled = false;
+            document.getElementById('add-destination').disabled = false;
+            
+            updateItinerary();
+            updateMap();
+            
+            document.body.removeChild(selectDialog);
+            alert(`已讀取行程: ${name}`);
+            
+            // 讀取位置緩存
+            if (selectedItinerary.locationCache) {
+                locationCache = selectedItinerary.locationCache;
+                // 更新本地儲存的位置緩存
+                localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(locationCache));
+                console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
+            }
+        });
+    });
+    
+    // 刪除行程
+    document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();  // 避免觸發父元素的點擊事件
+            
+            const name = btn.dataset.name;
+            
+            if (confirm(`確定要刪除行程 "${name}" 嗎?`)) {
+                delete savedItineraries[name];
+                localStorage.setItem(SAVED_ITINERARIES_KEY, JSON.stringify(savedItineraries));
+                
+                // 重新繪製對話框
+                document.body.removeChild(selectDialog);
+                if (Object.keys(savedItineraries).length > 0) {
+                    loadItinerary();
+                } else {
+                    alert('沒有更多保存的行程');
+                }
+            }
+        });
+    });
 }
 
 // 更新行程显示
@@ -973,10 +1145,23 @@ function updateItinerary() {
         dayCard.className = 'day-card';
         dayCard.dataset.dayIndex = dayIndex;
         
-        // 创建天数标题
+        // 獲取當天的設定
+        const daySetting = dailySettings.find(setting => setting.dayIndex === dayIndex);
+        const departureTimeValue = daySetting ? daySetting.departureTime : departureTime;
+        const maxHoursValue = daySetting ? daySetting.maxHours : maxDailyHours;
+        
+        // 创建天数标题和设置
         const dayTitle = document.createElement('div');
         dayTitle.className = 'day-title';
-        dayTitle.innerHTML = `<span>第 ${dayIndex + 1} 天</span><button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">建議行程順序</button>`;
+        dayTitle.innerHTML = `
+            <span>第 ${dayIndex + 1} 天</span>
+            <div class="day-settings">
+                <span>出發時間: ${departureTimeValue}</span>
+                <span>行程時間: ${maxHoursValue} 小時</span>
+                <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">設定</button>
+            </div>
+            <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">建議行程順序</button>
+        `;
         dayCard.appendChild(dayTitle);
         
         // 添加每个目的地
@@ -990,6 +1175,9 @@ function updateItinerary() {
                 startingPointItem.innerHTML = `
                     <div class="destination-info">
                         <div class="destination-name">出發點: ${point.name}</div>
+                        <div class="destination-details">
+                            <div>出發時間: ${point.arrivalTime}</div>
+                        </div>
                     </div>
                 `;
                 dayCard.appendChild(startingPointItem);
@@ -1097,13 +1285,17 @@ function updateItinerary() {
                     <div class="destination-info">
                         <div class="destination-name">${point.name}</div>
                         <div class="destination-details">
-                            建議停留時間: ${point.stayDuration} 小時
-                            <span class="stay-duration-edit" onclick="editStayDuration(${destinationIndex})">✏️ 編輯</span>
+                            <div>預計到達時間: ${point.arrivalTime}</div>
+                            ${point.isEndPoint ?
+                                `<div><strong>當天行程結束地點</strong></div>` :
+                                point.hasOwnProperty('effectiveStayDuration') && point.effectiveStayDuration === 0 ?
+                                    `<div>停留時間: 行程結束</div>` :
+                                    `<div>建議停留時間: ${point.stayDuration} 小時</div>
+                                    <span class="stay-duration-edit" onclick="editStayDuration(${destinationIndex})">✏️ 編輯</span>`
+                            }
                         </div>
                     </div>
-                    <div class="destination-actions">
-                        <button onclick="removeDestination(${destinationIndex})">刪除</button>
-                    </div>
+                    <button class="remove-btn" onclick="removeDestination(${destinationIndex})">✖</button>
                 `;
                 dayCard.appendChild(destinationItem);
                 
@@ -1173,11 +1365,10 @@ function handleMapClick(latlng) {
                     city: currentCity
                 });
                 
-                // 優化行程順序
-                optimizeItinerary();
-                
-                // 更新地圖和行程
+                // 更新地图
                 updateMap();
+                
+                // 更新行程
                 updateItinerary();
                 
                 console.log(`新增景點: ${locationName}，停留時間: ${stayDuration} 小時 (${currentCountry} - ${currentCity})`);
@@ -1199,6 +1390,11 @@ function toggleCoordinatesInputMode() {
 
 // 處理經緯度輸入
 function handleCoordinatesInput(lat, lng, locationName) {
+    // 將地點資訊存入緩存
+    locationCache[locationName] = [lat, lng];
+    // 保存緩存到本地儲存
+    localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(locationCache));
+    
     // 根據當前狀態決定是設置為出發點還是添加為景點
     if (!startingPoint) {
         // 如果還沒有出發點，則設置為出發點
@@ -1230,9 +1426,6 @@ function handleCoordinatesInput(lat, lng, locationName) {
             stayDuration: stayDuration
         });
         
-        // 優化行程順序
-        optimizeItinerary();
-        
         // 更新地圖和行程
         updateMap();
         updateItinerary();
@@ -1244,6 +1437,9 @@ function handleCoordinatesInput(lat, lng, locationName) {
     document.getElementById('latitude').value = '';
     document.getElementById('longitude').value = '';
     document.getElementById('coordinates-name').value = '';
+    
+    // 隱藏經緯度輸入區域
+    document.getElementById('coordinates-input-container').style.display = 'none';
 }
 
 // 页面加载完成后初始化
@@ -1258,8 +1454,25 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('new-destination').disabled = true;
     document.getElementById('add-destination').disabled = true;
     
+    // 讀取位置緩存
+    const savedLocationCache = localStorage.getItem(LOCATION_CACHE_KEY);
+    if (savedLocationCache) {
+        locationCache = JSON.parse(savedLocationCache);
+        console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
+    }
+    
     // 嘗試讀取已儲存的行程
     loadItinerary();
+    
+    // 看是否有從管理頁面選擇的行程
+    const selectedItineraryName = sessionStorage.getItem('selected_itinerary');
+    if (selectedItineraryName) {
+        // 清除，避免重複載入
+        sessionStorage.removeItem('selected_itinerary');
+        
+        // 載入選定的行程
+        loadSelectedItinerary(selectedItineraryName);
+    }
 });
 
 // 根據交通方式和起訖點打開交通查詢網站
@@ -1402,6 +1615,7 @@ function editStayDuration(index) {
 
 // 優化單天行程順序功能
 function optimizeDayItinerary(dayIndex) {
+    // 獲取當前分配到各天的行程
     const days = distributeItineraryToDays();
     
     if (dayIndex < 0 || dayIndex >= days.length) {
@@ -1418,33 +1632,86 @@ function optimizeDayItinerary(dayIndex) {
     // 保留當天的起點（可能是出發點或前一天的最後一個景點）
     const startPoint = day[0];
     
+    // 檢查當前天是否有設定結束地點
+    const dayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === dayIndex);
+    
     // 獲取當天的所有景點（排除起點）
     const dayDestinations = day.slice(1);
     
-    // 找出這些景點在全局destinations中的索引
-    const dayDestinationIndices = dayDestinations.map(point => 
-        destinations.findIndex(d => d.name === point.name)
-    ).filter(index => index !== -1);
-    
-    if (dayDestinationIndices.length <= 1) {
+    if (dayDestinations.length <= 1) {
         alert('此天可優化的景點數量太少！');
         return;
     }
     
-    // 使用最近鄰算法優化當天行程順序
-    const optimizedIndices = [dayDestinationIndices[0]];
-    const remainingIndices = [...dayDestinationIndices.slice(1)];
+    // 檢查最後一個景點是否是結束地點
+    let endPoint = null;
+    let lastDestinationIndex = -1;
+    
+    if (dayEndPoint) {
+        // 尋找結束地點在當天景點中的位置
+        lastDestinationIndex = dayDestinations.findIndex(d => 
+            d.name === dayEndPoint.endPoint.name && 
+            d.coordinates[0] === dayEndPoint.endPoint.coordinates[0] && 
+            d.coordinates[1] === dayEndPoint.endPoint.coordinates[1]
+        );
+        
+        if (lastDestinationIndex !== -1) {
+            endPoint = dayDestinations[lastDestinationIndex];
+            // 從待優化列表中移除結束地點
+            dayDestinations.splice(lastDestinationIndex, 1);
+        }
+    }
+    
+    console.log(`開始優化第 ${dayIndex + 1} 天的行程，包含 ${dayDestinations.length} 個景點，${endPoint ? '有設定結束地點' : '沒有結束地點'}`);
+    
+    if (dayDestinations.length <= 1 && endPoint) {
+        alert('此天除起點和終點外，只有一個或沒有景點，無需優化！');
+        return;
+    }
+    
+    // 查找目前全局destinations中當天所有景點的位置（除了起點和終點）
+    let allDayDestinationIndices = [];
+    let firstDayDestinationIndex = -1; // 記錄第一個景點的索引，作為插入位置參考
+    
+    for (const destination of dayDestinations) {
+        const index = destinations.findIndex(d => 
+            d.name === destination.name && 
+            d.coordinates[0] === destination.coordinates[0] && 
+            d.coordinates[1] === destination.coordinates[1]
+        );
+        
+        if (index !== -1) {
+            if (firstDayDestinationIndex === -1) {
+                firstDayDestinationIndex = index;
+            }
+            allDayDestinationIndices.push(index);
+        }
+    }
+    
+    // 確認是否所有景點都找到了
+    if (allDayDestinationIndices.length !== dayDestinations.length) {
+        console.error('無法找到所有當天景點在全局destinations中的位置');
+        alert('優化失敗：無法匹配所有景點');
+        return;
+    }
+    
+    // 將當天景點（除了起點和終點）保存下來
+    const dayDestinationsCopy = allDayDestinationIndices.map(index => ({...destinations[index]}));
+    
+    // 使用最近鄰算法優化景點順序
+    const optimizedDestinations = [];
+    const destinationsToOptimize = [...dayDestinationsCopy];
     
     // 從起點開始計算
     let lastCoordinates = startPoint.coordinates;
     
-    while (remainingIndices.length > 0) {
+    while (destinationsToOptimize.length > 0) {
         let nearestIndex = 0;
-        let minDistance = calculateDistance(lastCoordinates, destinations[remainingIndices[0]].coordinates);
+        let minDistance = calculateDistance(lastCoordinates, destinationsToOptimize[0].coordinates);
         
         // 找到最近的下一個景點
-        for (let i = 1; i < remainingIndices.length; i++) {
-            const distance = calculateDistance(lastCoordinates, destinations[remainingIndices[i]].coordinates);
+        for (let i = 1; i < destinationsToOptimize.length; i++) {
+            const distance = calculateDistance(lastCoordinates, destinationsToOptimize[i].coordinates);
             if (distance < minDistance) {
                 minDistance = distance;
                 nearestIndex = i;
@@ -1452,27 +1719,827 @@ function optimizeDayItinerary(dayIndex) {
         }
         
         // 添加到優化後的行程中
-        const nextDestinationIndex = remainingIndices[nearestIndex];
-        optimizedIndices.push(nextDestinationIndex);
-        lastCoordinates = destinations[nextDestinationIndex].coordinates;
-        remainingIndices.splice(nearestIndex, 1);
+        const nextDestination = destinationsToOptimize[nearestIndex];
+        optimizedDestinations.push(nextDestination);
+        lastCoordinates = nextDestination.coordinates;
+        destinationsToOptimize.splice(nearestIndex, 1);
     }
     
-    // 重新排序全局destinations中的相關景點
-    const newDestinations = [...destinations];
-    
-    // 將優化後的順序應用到全局destinations
-    for (let i = 0; i < dayDestinationIndices.length; i++) {
-        const oldIndex = dayDestinationIndices[i];
-        const newIndex = optimizedIndices[i];
-        newDestinations[oldIndex] = destinations[newIndex];
+    // 如果有結束地點，加回到優化後的列表
+    if (endPoint) {
+        optimizedDestinations.push(endPoint);
     }
     
-    destinations = newDestinations;
+    console.log('優化後的景點順序:', optimizedDestinations.map(d => d.name));
+    
+    // 從全局destinations中移除當天的所有景點
+    // 注意：我們需要從後往前刪除，避免索引變化
+    allDayDestinationIndices.sort((a, b) => b - a);
+    for (const index of allDayDestinationIndices) {
+        destinations.splice(index, 1);
+    }
+    
+    // 在第一個景點的位置插入優化後的景點
+    destinations.splice(firstDayDestinationIndex, 0, ...optimizedDestinations);
     
     // 更新地圖和行程
     updateMap();
     updateItinerary();
     
     alert(`已優化第 ${dayIndex + 1} 天的行程順序！`);
+}
+
+// 編輯特定日期的設定
+function editDaySettings(dayIndex) {
+    // 獲取當前設定
+    const daySetting = dailySettings.find(setting => setting.dayIndex === dayIndex);
+    const currentDepartureTime = daySetting ? daySetting.departureTime : departureTime;
+    const currentMaxHours = daySetting ? daySetting.maxHours : maxDailyHours;
+    
+    // 獲取當前結束地點
+    const dayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === dayIndex);
+    const currentEndPoint = dayEndPoint ? dayEndPoint.endPoint.name : '';
+    
+    // 創建設定對話框
+    const settingsDialog = document.createElement('div');
+    settingsDialog.className = 'settings-dialog';
+    settingsDialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+    
+    const dialogContent = document.createElement('div');
+    dialogContent.className = 'settings-dialog-content';
+    dialogContent.style.cssText = `
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        width: 400px;
+        max-width: 90%;
+    `;
+    
+    dialogContent.innerHTML = `
+        <h3>第 ${dayIndex + 1} 天設定</h3>
+        <div class="settings-form">
+            <div class="settings-row">
+                <label for="day-departure-time">出發時間:</label>
+                <input type="time" id="day-departure-time" value="${currentDepartureTime}">
+            </div>
+            <div class="settings-row">
+                <label for="day-max-hours">行程時間:</label>
+                <input type="number" id="day-max-hours" min="1" max="24" step="0.5" value="${currentMaxHours}">
+                <span>小時</span>
+            </div>
+            <div class="settings-row">
+                <label for="day-end-point">結束地點:</label>
+                <input type="text" id="day-end-point" placeholder="請輸入結束地點" value="${currentEndPoint}">
+                <button id="use-saved-location">使用已儲存位置</button>
+                ${currentEndPoint ? `<button id="remove-end-point">移除</button>` : ''}
+            </div>
+            <div class="settings-actions">
+                <button id="save-day-settings">儲存</button>
+                <button id="cancel-day-settings">取消</button>
+                <button id="reset-day-settings">重置為默認</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(settingsDialog);
+    
+    // 將對話框內容添加到對話框
+    settingsDialog.appendChild(dialogContent);
+    
+    // 使用已儲存位置按鈕
+    document.getElementById('use-saved-location').addEventListener('click', () => {
+        // 檢查是否有儲存的位置
+        if (Object.keys(locationCache).length === 0) {
+            alert('沒有已儲存的經緯度位置');
+            return;
+        }
+        
+        // 創建位置選擇對話框
+        const locationDialog = document.createElement('div');
+        locationDialog.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+        `;
+        
+        const locationContent = document.createElement('div');
+        locationContent.style.cssText = `
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            width: 400px;
+            max-width: 90%;
+            max-height: 70vh;
+            overflow-y: auto;
+        `;
+        
+        // 建立位置列表
+        const locationList = Object.entries(locationCache).map(([name, coords]) => {
+            return `
+            <div style="padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;" 
+                 class="location-item" data-name="${name}" data-lat="${coords[0]}" data-lng="${coords[1]}">
+                <strong>${name}</strong>
+                <div>經緯度: [${coords[0]}, ${coords[1]}]</div>
+            </div>
+            `;
+        }).join('');
+        
+        locationContent.innerHTML = `
+            <h3>選擇已儲存的位置</h3>
+            <div style="margin-bottom: 15px;">
+                ${locationList}
+            </div>
+            <div style="text-align: right;">
+                <button id="cancel-location-select">取消</button>
+            </div>
+        `;
+        
+        locationDialog.appendChild(locationContent);
+        document.body.appendChild(locationDialog);
+        
+        // 取消選擇
+        document.getElementById('cancel-location-select').addEventListener('click', () => {
+            document.body.removeChild(locationDialog);
+        });
+        
+        // 選擇位置
+        document.querySelectorAll('.location-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const name = item.dataset.name;
+                
+                // 設定結束地點輸入欄
+                document.getElementById('day-end-point').value = name;
+                
+                // 關閉位置選擇對話框
+                document.body.removeChild(locationDialog);
+            });
+        });
+    });
+    
+    // 儲存設定
+    document.getElementById('save-day-settings').addEventListener('click', () => {
+        const newDepartureTime = document.getElementById('day-departure-time').value;
+        const newMaxHours = parseFloat(document.getElementById('day-max-hours').value);
+        const newEndPoint = document.getElementById('day-end-point').value.trim();
+        
+        if (!newDepartureTime) {
+            alert('請輸入有效的出發時間');
+            return;
+        }
+        
+        if (isNaN(newMaxHours) || newMaxHours < 1 || newMaxHours > 24) {
+            alert('請輸入有效的行程時間 (1-24小時)');
+            return;
+        }
+        
+        // 更新或添加時間設定
+        const existingSettingIndex = dailySettings.findIndex(setting => setting.dayIndex === dayIndex);
+        if (existingSettingIndex >= 0) {
+            dailySettings[existingSettingIndex] = {
+                dayIndex,
+                departureTime: newDepartureTime,
+                maxHours: newMaxHours
+            };
+        } else {
+            dailySettings.push({
+                dayIndex,
+                departureTime: newDepartureTime,
+                maxHours: newMaxHours
+            });
+        }
+        
+        // 處理結束地點
+        if (newEndPoint) {
+            // 關閉設定對話框，避免重複彈出對話框
+            document.body.removeChild(settingsDialog);
+            
+            // 設定結束地點 (會觸發更新行程和地圖)
+            setDayEndPoint(dayIndex, newEndPoint);
+        } else {
+            // 如果沒有設定結束地點但之前有，則移除
+            if (dayEndPoint) {
+                removeDayEndPoint(dayIndex);
+            }
+            
+            // 關閉對話框
+            document.body.removeChild(settingsDialog);
+            
+            // 提示用戶設定已更新
+            console.log(`第 ${dayIndex + 1} 天設定已更新: 出發時間 = ${newDepartureTime}, 最大行程時間 = ${newMaxHours} 小時`);
+            
+            // 顯示提示訊息
+            const message = document.createElement('div');
+            message.className = 'alert alert-success';
+            message.style.position = 'fixed';
+            message.style.top = '20px';
+            message.style.left = '50%';
+            message.style.transform = 'translateX(-50%)';
+            message.style.zIndex = '9999';
+            message.style.padding = '10px 20px';
+            message.style.borderRadius = '5px';
+            message.style.boxShadow = '0 2px 10px rgba(0,0,0,0.2)';
+            message.textContent = `第 ${dayIndex + 1} 天設定已更新，重新計算行程`;
+            
+            document.body.appendChild(message);
+            
+            // 2秒後移除提示
+            setTimeout(() => {
+                document.body.removeChild(message);
+            }, 2000);
+            
+            // 重新計算和顯示行程
+            updateItinerary();
+        }
+    });
+    
+    // 移除結束地點
+    if (currentEndPoint) {
+        document.getElementById('remove-end-point').addEventListener('click', () => {
+            removeDayEndPoint(dayIndex);
+            document.body.removeChild(settingsDialog);
+        });
+    }
+    
+    // 取消設定
+    document.getElementById('cancel-day-settings').addEventListener('click', () => {
+        document.body.removeChild(settingsDialog);
+    });
+    
+    // 重置為默認設定
+    document.getElementById('reset-day-settings').addEventListener('click', () => {
+        // 移除特定日期的設定
+        const existingSettingIndex = dailySettings.findIndex(setting => setting.dayIndex === dayIndex);
+        if (existingSettingIndex >= 0) {
+            dailySettings.splice(existingSettingIndex, 1);
+        }
+        
+        // 移除結束地點設定
+        const existingEndPointIndex = dailyEndPoints.findIndex(ep => ep.dayIndex === dayIndex);
+        if (existingEndPointIndex >= 0) {
+            dailyEndPoints.splice(existingEndPointIndex, 1);
+        }
+        
+        // 關閉對話框
+        document.body.removeChild(settingsDialog);
+        
+        // 重新計算和顯示行程
+        updateItinerary();
+    });
+}
+
+// 載入指定名稱的行程
+function loadSelectedItinerary(name) {
+    // 獲取已儲存的所有行程
+    const savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
+    
+    // 檢查行程是否存在
+    if (!savedItineraries[name]) {
+        alert(`找不到行程: ${name}`);
+        return;
+    }
+    
+    const selectedItinerary = savedItineraries[name];
+    
+    // 設置行程數據
+    startingPoint = selectedItinerary.startingPoint;
+    destinations = selectedItinerary.destinations;
+    
+    // 讀取出發時間信息
+    departureDate = selectedItinerary.departureDate || null;
+    departureTime = selectedItinerary.departureTime || "09:00";
+    
+    // 讀取每日行程時間
+    if (selectedItinerary.maxDailyHours) {
+        maxDailyHours = selectedItinerary.maxDailyHours;
+        document.getElementById('max-daily-hours').value = maxDailyHours;
+    }
+    
+    // 讀取每日特定設定
+    if (selectedItinerary.dailySettings && Array.isArray(selectedItinerary.dailySettings)) {
+        dailySettings = selectedItinerary.dailySettings;
+    } else {
+        dailySettings = []; // 如果沒有每日設定，重置為空
+    }
+    
+    // 讀取每日結束地點設定
+    if (selectedItinerary.dailyEndPoints && Array.isArray(selectedItinerary.dailyEndPoints)) {
+        dailyEndPoints = selectedItinerary.dailyEndPoints;
+    } else {
+        dailyEndPoints = []; // 如果沒有結束地點設定，重置為空
+    }
+    
+    // 更新界面
+    document.getElementById('starting-point').value = startingPoint.name;
+    
+    // 如果有出發日期和時間，更新相應的輸入框
+    if (departureDate) {
+        document.getElementById('departure-date').value = departureDate;
+    }
+    if (departureTime) {
+        document.getElementById('departure-time').value = departureTime;
+    }
+    
+    // 启用添加景点功能
+    document.getElementById('new-destination').disabled = false;
+    document.getElementById('add-destination').disabled = false;
+    
+    updateItinerary();
+    updateMap();
+    
+    alert(`已讀取行程: ${name}`);
+    
+    // 讀取位置緩存
+    if (selectedItinerary.locationCache) {
+        locationCache = selectedItinerary.locationCache;
+        // 更新本地儲存的位置緩存
+        localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(locationCache));
+        console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
+    }
+}
+
+// 管理已儲存的經緯度位置
+function manageLocationCache() {
+    // 檢查是否有保存的位置
+    if (Object.keys(locationCache).length === 0) {
+        alert('目前沒有使用經緯度設定過的位置');
+        return;
+    }
+    
+    // 檢查是否已經有開啟的管理視窗
+    let existingDialog = document.getElementById(LOCATION_MANAGER_ID);
+    if (existingDialog) {
+        document.body.removeChild(existingDialog);
+    }
+    
+    // 創建管理視窗
+    const managerDialog = document.createElement('div');
+    managerDialog.id = LOCATION_MANAGER_ID;
+    managerDialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+    
+    const dialogContent = document.createElement('div');
+    dialogContent.style.cssText = `
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+    `;
+    
+    const locationList = Object.entries(locationCache).map(([name, coords]) => {
+        return `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <div>
+                <strong>${name}</strong>
+                <div>經緯度: [${coords[0]}, ${coords[1]}]</div>
+            </div>
+            <div>
+                <button class="use-location-btn" data-name="${name}" data-lat="${coords[0]}" data-lng="${coords[1]}">使用</button>
+                <button class="remove-location-btn" data-name="${name}">刪除</button>
+            </div>
+        </div>
+        `;
+    }).join('');
+    
+    dialogContent.innerHTML = `
+        <h3>管理經緯度位置</h3>
+        <div style="margin-bottom: 20px;">
+            總共有 ${Object.keys(locationCache).length} 個保存的位置
+        </div>
+        <div>
+            ${locationList}
+        </div>
+        <div style="text-align: right; margin-top: 20px;">
+            <button id="close-location-manager">關閉</button>
+        </div>
+    `;
+    
+    managerDialog.appendChild(dialogContent);
+    document.body.appendChild(managerDialog);
+    
+    // 關閉管理視窗
+    document.getElementById('close-location-manager').addEventListener('click', () => {
+        document.body.removeChild(managerDialog);
+    });
+    
+    // 使用位置按鈕
+    document.querySelectorAll('.use-location-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const name = btn.dataset.name;
+            const lat = parseFloat(btn.dataset.lat);
+            const lng = parseFloat(btn.dataset.lng);
+            
+            // 填入經緯度輸入區域
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lng;
+            document.getElementById('coordinates-name').value = name;
+            
+            // 顯示經緯度輸入區域
+            document.getElementById('coordinates-input-container').style.display = 'block';
+            
+            // 關閉管理視窗
+            document.body.removeChild(managerDialog);
+        });
+    });
+    
+    // 刪除位置按鈕
+    document.querySelectorAll('.remove-location-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const name = btn.dataset.name;
+            
+            if (confirm(`確定要刪除「${name}」這個位置嗎？`)) {
+                // 從緩存中刪除
+                delete locationCache[name];
+                
+                // 更新本地儲存
+                localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(locationCache));
+                
+                // 重新載入管理視窗
+                manageLocationCache();
+            }
+        });
+    });
+}
+
+// 匯出行程與經緯度位置數據
+function exportData() {
+    // 檢查是否有資料可匯出
+    const hasItineraries = Object.keys(JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}')).length > 0;
+    const hasLocationCache = Object.keys(locationCache).length > 0;
+    
+    if (!hasItineraries && !hasLocationCache) {
+        alert('沒有行程或經緯度位置可供匯出');
+        return;
+    }
+    
+    // 準備匯出資料
+    const exportData = {
+        savedItineraries: JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}'),
+        locationCache: locationCache,
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+    };
+    
+    // 轉換為JSON字串
+    const dataStr = JSON.stringify(exportData, null, 2);
+    
+    // 建立下載用的blob與連結
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    // 建立下載連結
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.download = `travel_planner_export_${new Date().toISOString().slice(0, 10)}.json`;
+    
+    // 觸發下載
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    
+    // 清理
+    setTimeout(() => {
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+    }, 100);
+    
+    alert('匯出成功！');
+}
+
+// 匯入行程與經緯度位置數據
+function importData() {
+    // 建立隱藏的檔案輸入元素
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.style.display = 'none';
+    
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const importedData = JSON.parse(event.target.result);
+                
+                // 驗證匯入資料格式
+                if (!importedData.version || !importedData.exportDate) {
+                    throw new Error('無效的匯入資料格式');
+                }
+                
+                // 確認要匯入哪些資料
+                let importItineraries = false;
+                let importLocations = false;
+                
+                if (importedData.savedItineraries && Object.keys(importedData.savedItineraries).length > 0) {
+                    importItineraries = confirm(`發現 ${Object.keys(importedData.savedItineraries).length} 個已儲存的行程，是否匯入？\n(注意：同名行程將被覆蓋)`);
+                }
+                
+                if (importedData.locationCache && Object.keys(importedData.locationCache).length > 0) {
+                    importLocations = confirm(`發現 ${Object.keys(importedData.locationCache).length} 個經緯度位置，是否匯入？\n(注意：同名位置將被覆蓋)`);
+                }
+                
+                // 執行匯入
+                if (importItineraries) {
+                    const currentItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
+                    const mergedItineraries = { ...currentItineraries, ...importedData.savedItineraries };
+                    localStorage.setItem(SAVED_ITINERARIES_KEY, JSON.stringify(mergedItineraries));
+                }
+                
+                if (importLocations) {
+                    locationCache = { ...locationCache, ...importedData.locationCache };
+                    localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(locationCache));
+                }
+                
+                if (importItineraries || importLocations) {
+                    alert('匯入成功！');
+                } else {
+                    alert('沒有匯入任何資料');
+                }
+                
+            } catch (error) {
+                console.error('匯入錯誤', error);
+                alert(`匯入失敗：${error.message}`);
+            }
+        };
+        
+        reader.readAsText(file);
+    });
+    
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    
+    // 清理
+    setTimeout(() => {
+        document.body.removeChild(fileInput);
+    }, 100);
+}
+
+// 設定每天行程的結束地點
+function setDayEndPoint(dayIndex, endPointLocation) {
+    if (!endPointLocation || !endPointLocation.trim()) {
+        alert('請輸入有效的結束地點');
+        return;
+    }
+    
+    // 檢查是否已有該天的行程
+    const days = distributeItineraryToDays();
+    if (dayIndex >= days.length) {
+        alert(`第 ${dayIndex + 1} 天的行程尚未安排，無法設定結束地點`);
+        return;
+    }
+    
+    // 檢查是否是儲存的經緯度位置
+    let coordinates;
+    if (locationCache[endPointLocation]) {
+        // 使用緩存的經緯度資料
+        coordinates = locationCache[endPointLocation];
+        console.log(`使用緩存中的經緯度資料設定結束地點: ${endPointLocation} -> [${coordinates[0]}, ${coordinates[1]}]`);
+        
+        // 直接設定結束地點
+        setEndPointWithCoordinates(dayIndex, endPointLocation, coordinates);
+    } else {
+        // 地理編碼獲取結束地點的座標
+        geocodeLocation(endPointLocation).then(coords => {
+            setEndPointWithCoordinates(dayIndex, endPointLocation, coords);
+        }).catch(error => {
+            alert(`無法找到地點: ${endPointLocation}。請嘗試更具體的地址或使用已儲存的經緯度位置。`);
+            console.error('Geocoding error:', error);
+        });
+    }
+}
+
+// 使用指定座標設定結束地點
+function setEndPointWithCoordinates(dayIndex, locationName, coordinates) {
+    // 查找現有結束地點設定
+    const existingEndPointIndex = dailyEndPoints.findIndex(ep => ep.dayIndex === dayIndex);
+    
+    const endPoint = {
+        name: locationName,
+        coordinates: coordinates,
+        stayDuration: 0 // 結束地點不計停留時間
+    };
+    
+    // 更新或添加結束地點
+    if (existingEndPointIndex >= 0) {
+        dailyEndPoints[existingEndPointIndex].endPoint = endPoint;
+    } else {
+        dailyEndPoints.push({
+            dayIndex: dayIndex,
+            endPoint: endPoint
+        });
+    }
+    
+    // 保存到本地儲存
+    saveToLocalStorage();
+    
+    // 更新行程顯示
+    updateItinerary();
+    
+    alert(`已設定第 ${dayIndex + 1} 天的結束地點為: ${locationName}`);
+}
+
+// 移除每天行程的結束地點
+function removeDayEndPoint(dayIndex) {
+    const existingEndPointIndex = dailyEndPoints.findIndex(ep => ep.dayIndex === dayIndex);
+    
+    if (existingEndPointIndex >= 0) {
+        const endPointName = dailyEndPoints[existingEndPointIndex].endPoint.name;
+        dailyEndPoints.splice(existingEndPointIndex, 1);
+        
+        // 保存到本地儲存
+        saveToLocalStorage();
+        
+        // 更新行程顯示
+        updateItinerary();
+        
+        alert(`已移除第 ${dayIndex + 1} 天的結束地點: ${endPointName}`);
+    } else {
+        alert(`第 ${dayIndex + 1} 天沒有設定結束地點`);
+    }
+}
+
+// 保存設定到本地儲存
+function saveToLocalStorage() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        startingPoint: startingPoint,
+        destinations: destinations,
+        departureDate: departureDate,
+        departureTime: departureTime,
+        maxDailyHours: maxDailyHours,
+        dailySettings: dailySettings,
+        dailyEndPoints: dailyEndPoints,
+        locationCache: locationCache
+    }));
+}
+
+// 管理行程功能
+function manageItineraries() {
+    // 獲取保存的行程
+    const savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
+    
+    // 檢查是否有保存的行程
+    if (Object.keys(savedItineraries).length === 0) {
+        alert('沒有已保存的行程');
+        return;
+    }
+    
+    // 創建管理對話框
+    const manageDialog = document.createElement('div');
+    manageDialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+    
+    const dialogContent = document.createElement('div');
+    dialogContent.style.cssText = `
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        max-width: 800px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+    `;
+    
+    // 建立行程列表
+    const itineraryCards = Object.entries(savedItineraries).map(([name, data]) => {
+        const itineraryDate = new Date(data.savedAt).toLocaleString('zh-TW');
+        const destinationsCount = data.destinations ? data.destinations.length : 0;
+        
+        return `
+        <div class="itinerary-card" style="margin-bottom: 15px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
+            <h3 style="margin-top: 0;">${name}</h3>
+            <div>
+                <p><strong>建立時間:</strong> ${itineraryDate}</p>
+                <p><strong>出發點:</strong> ${data.startingPoint ? data.startingPoint.name : '未設定'}</p>
+                <p><strong>景點數量:</strong> ${destinationsCount}</p>
+                ${data.departureDate ? `<p><strong>出發日期:</strong> ${data.departureDate}</p>` : ''}
+            </div>
+            <div style="margin-top: 10px; display: flex; gap: 10px;">
+                <button class="load-itinerary-btn" data-name="${name}">載入</button>
+                <button class="rename-itinerary-btn" data-name="${name}">重命名</button>
+                <button class="delete-itinerary-btn" data-name="${name}">刪除</button>
+            </div>
+        </div>
+        `;
+    }).join('');
+    
+    dialogContent.innerHTML = `
+        <h2>管理已保存的行程</h2>
+        <div style="margin-bottom: 20px;">
+            共有 ${Object.keys(savedItineraries).length} 個已保存的行程
+        </div>
+        <div class="itinerary-list">
+            ${itineraryCards}
+        </div>
+        <div style="margin-top: 20px; text-align: right;">
+            <button id="close-manage-dialog">關閉</button>
+        </div>
+    `;
+    
+    manageDialog.appendChild(dialogContent);
+    document.body.appendChild(manageDialog);
+    
+    // 關閉按鈕
+    document.getElementById('close-manage-dialog').addEventListener('click', () => {
+        document.body.removeChild(manageDialog);
+    });
+    
+    // 設置載入行程按鈕的事件
+    dialogContent.querySelectorAll('.load-itinerary-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const name = btn.dataset.name;
+            loadSelectedItinerary(name);
+            document.body.removeChild(manageDialog);
+        });
+    });
+    
+    // 設置重命名行程按鈕的事件
+    dialogContent.querySelectorAll('.rename-itinerary-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const oldName = btn.dataset.name;
+            const newName = prompt('請輸入新名稱:', oldName);
+            
+            if (newName && newName !== oldName) {
+                if (savedItineraries[newName]) {
+                    alert(`名稱 "${newName}" 已存在`);
+                    return;
+                }
+                
+                // 重命名行程
+                savedItineraries[newName] = savedItineraries[oldName];
+                delete savedItineraries[oldName];
+                
+                // 保存更改
+                localStorage.setItem(SAVED_ITINERARIES_KEY, JSON.stringify(savedItineraries));
+                
+                // 重新打開管理對話框
+                document.body.removeChild(manageDialog);
+                manageItineraries();
+            }
+        });
+    });
+    
+    // 設置刪除行程按鈕的事件
+    dialogContent.querySelectorAll('.delete-itinerary-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const name = btn.dataset.name;
+            
+            if (confirm(`確定要刪除行程 "${name}" 嗎？`)) {
+                // 刪除行程
+                delete savedItineraries[name];
+                
+                // 保存更改
+                localStorage.setItem(SAVED_ITINERARIES_KEY, JSON.stringify(savedItineraries));
+                
+                // 重新打開管理對話框，或者關閉如果沒有更多行程
+                document.body.removeChild(manageDialog);
+                
+                if (Object.keys(savedItineraries).length > 0) {
+                    manageItineraries();
+                } else {
+                    alert('所有行程已刪除');
+                }
+            }
+        });
+    });
 }

@@ -138,8 +138,11 @@
                     totalHours += dest.stayDuration || 0;
                 });
                 
-                // 估算天數（每天8小時）
-                totalDays = Math.ceil(totalHours / 8);
+                // 使用行程設定的每日時間或默認值
+                const dailyHours = itinerary.maxDailyHours || 8;
+                
+                // 估算天數（使用自訂每日小時數）
+                totalDays = Math.ceil(totalHours / dailyHours);
                 
                 const itineraryItem = document.createElement('div');
                 itineraryItem.className = 'itinerary-item';
@@ -150,6 +153,7 @@
                         <div class="itinerary-stats">
                             <span>${destinationsCount} 個景點</span> | 
                             <span>預估 ${totalDays} 天行程</span>
+                            ${itinerary.maxDailyHours ? `| <span>每天 ${itinerary.maxDailyHours} 小時</span>` : ''}
                         </div>
                     </div>
                     <div class="itinerary-actions">
