@@ -499,6 +499,14 @@ async function addDestination(location) {
 
 // 删除景点
 function removeDestination(index) {
+    // 獲取要刪除的景點名稱
+    const destinationName = destinations[index].name;
+    
+    // 顯示確認對話框
+    if (!confirm(`確定要刪除景點「${destinationName}」嗎？`)) {
+        return; // 如果用戶取消，則不執行刪除操作
+    }
+    
     destinations.splice(index, 1);
     
     // 更新地图
@@ -507,7 +515,7 @@ function removeDestination(index) {
     // 更新行程
     updateItinerary();
     
-    console.log(`已刪除景點 #${index + 1}`);
+    console.log(`已刪除景點 #${index + 1}: ${destinationName}`);
 }
 
 // 地理编码：将地址转换为坐标
@@ -1277,17 +1285,36 @@ function updateItinerary() {
                 destinationItem.className = 'destination-item';
                 destinationItem.dataset.pointIndex = pointIndex;
                 destinationItem.dataset.destinationIndex = destinations.findIndex(d => d.name === point.name);
-                destinationItem.draggable = true;
+                
+                // 設置是否為出發點或結束點的標記
+                if (point.isStartingPoint) {
+                    destinationItem.dataset.isStartingPoint = "true";
+                    destinationItem.draggable = false; // 出發點不可拖曳
+                } else if (point.isEndPoint) {
+                    destinationItem.dataset.isEndPoint = "true";
+                    destinationItem.draggable = false; // 結束點不可拖曳
+                } else {
+                    destinationItem.draggable = true;
+                }
                 
                 // 添加停留時間編輯功能
                 const destinationIndex = destinations.findIndex(d => d.name === point.name);
+                
+                // 判斷是否為出發點
+                let setEndPointButton = '';
+                if (!point.isStartingPoint && !point.isEndPoint) {
+                    // 只有非出發點和非結束點的景點才能設為結束地點
+                    setEndPointButton = `<button class="set-endpoint-btn" onclick="selectEndPointFromDay(${dayIndex}, ${destinationIndex})">設為結束點</button>`;
+                }
+                
                 destinationItem.innerHTML = `
                     <div class="destination-info">
                         <div class="destination-name">${point.name}</div>
                         <div class="destination-details">
                             <div>預計到達時間: ${point.arrivalTime}</div>
                             ${point.isEndPoint ?
-                                `<div><strong>當天行程結束地點</strong></div>` :
+                                `<div><strong>當天行程結束地點</strong></div>
+                                <button class="remove-endpoint-btn" onclick="removeDayEndPoint(${dayIndex})">取消設為結束點</button>` :
                                 point.hasOwnProperty('effectiveStayDuration') && point.effectiveStayDuration === 0 ?
                                     `<div>停留時間: 行程結束</div>` :
                                     `<div>建議停留時間: ${point.stayDuration} 小時</div>
@@ -1295,9 +1322,11 @@ function updateItinerary() {
                             }
                         </div>
                     </div>
-                    <button class="remove-btn" onclick="removeDestination(${destinationIndex})">✖</button>
+                    <div class="destination-actions">
+                        ${setEndPointButton}
+                        <button class="remove-btn" onclick="removeDestination(${destinationIndex})">✖</button>
+                    </div>
                 `;
-                dayCard.appendChild(destinationItem);
                 
                 // 添加拖曳事件監聽器
                 destinationItem.addEventListener('dragstart', handleDragStart);
@@ -1306,6 +1335,14 @@ function updateItinerary() {
                 destinationItem.addEventListener('dragenter', handleDragEnter);
                 destinationItem.addEventListener('dragleave', handleDragLeave);
                 destinationItem.addEventListener('drop', handleDrop);
+                
+                // 添加觸摸事件監聽器（用於移動設備）
+                destinationItem.addEventListener('touchstart', handleTouchStart);
+                destinationItem.addEventListener('touchmove', handleTouchMove);
+                destinationItem.addEventListener('touchend', handleTouchEnd);
+                destinationItem.addEventListener('touchcancel', handleTouchEnd);
+                
+                dayCard.appendChild(destinationItem);
             }
         });
         
@@ -1523,9 +1560,19 @@ function openScheduleQuery(transportMode, fromLocation, toLocation) {
 }
 // 拖曳相關變數
 let draggedItem = null;
+let touchDraggedItem = null;
+let touchStartX = 0;
+let touchStartY = 0;
+let isTouchMoving = false;
 
 // 拖曳事件處理函數
 function handleDragStart(e) {
+    // 如果是出發點或結束點，則不允許拖曳
+    if (this.dataset.isStartingPoint === "true" || this.dataset.isEndPoint === "true") {
+        e.preventDefault();
+        return false;
+    }
+    
     draggedItem = this;
     setTimeout(() => {
         this.classList.add('dragging');
@@ -1548,6 +1595,10 @@ function handleDragOver(e) {
 }
 
 function handleDragEnter(e) {
+    // 如果目標是出發點或結束點，則不顯示拖曳目標樣式
+    if (this.dataset.isStartingPoint === "true" || this.dataset.isEndPoint === "true") {
+        return;
+    }
     this.classList.add('drag-over');
 }
 
@@ -1558,6 +1609,11 @@ function handleDragLeave(e) {
 function handleDrop(e) {
     if (e.stopPropagation) {
         e.stopPropagation();
+    }
+    
+    // 如果目標是出發點或結束點，則不執行交換
+    if (this.dataset.isStartingPoint === "true" || this.dataset.isEndPoint === "true") {
+        return false;
     }
     
     if (draggedItem !== this) {
@@ -1579,6 +1635,113 @@ function handleDrop(e) {
     
     this.classList.remove('drag-over');
     return false;
+}
+
+// 移動設備觸控處理函數
+function handleTouchStart(e) {
+    // 如果是出發點或結束點，則不啟動拖曳
+    if (this.dataset.isStartingPoint === "true" || this.dataset.isEndPoint === "true") {
+        return;
+    }
+    
+    touchDraggedItem = this;
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    isTouchMoving = false;
+    
+    setTimeout(() => {
+        if (!isTouchMoving && touchDraggedItem) {
+            touchDraggedItem.classList.add('dragging');
+            // 長按震動反饋（如果設備支持）
+            if (navigator.vibrate) {
+                navigator.vibrate(50);
+            }
+        }
+    }, 300);  // 300ms 長按後觸發拖曳
+}
+
+function handleTouchMove(e) {
+    if (!touchDraggedItem) return;
+    
+    const touch = e.touches[0];
+    const moveX = touch.clientX - touchStartX;
+    const moveY = touch.clientY - touchStartY;
+    
+    // 確定是否為有意義的移動（超過10px）
+    if (Math.abs(moveX) > 10 || Math.abs(moveY) > 10) {
+        isTouchMoving = true;
+    }
+    
+    // 只有在拖曳模式下才滾動頁面
+    if (touchDraggedItem.classList.contains('dragging')) {
+        e.preventDefault();  // 防止頁面滾動
+        
+        // 獲取觸摸位置下的元素
+        const elementsUnderTouch = document.elementsFromPoint(touch.clientX, touch.clientY);
+        
+        // 查找可拖放的目標元素
+        for (const element of elementsUnderTouch) {
+            if (element.classList.contains('destination-item') && element !== touchDraggedItem) {
+                // 檢查是否為出發點或結束點
+                if (element.dataset.isStartingPoint === "true" || element.dataset.isEndPoint === "true") {
+                    continue; // 跳過出發點和結束點
+                }
+                
+                // 移除之前的目標元素標記
+                document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                
+                // 標記當前目標元素
+                element.classList.add('drag-over');
+                break;
+            }
+        }
+    }
+}
+
+function handleTouchEnd(e) {
+    if (!touchDraggedItem) return;
+    
+    if (touchDraggedItem.classList.contains('dragging')) {
+        const touch = e.changedTouches[0];
+        
+        // 獲取觸摸結束位置下的元素
+        const elementsUnderTouch = document.elementsFromPoint(touch.clientX, touch.clientY);
+        
+        // 查找可拖放的目標元素
+        for (const element of elementsUnderTouch) {
+            if (element.classList.contains('destination-item') && element !== touchDraggedItem) {
+                // 檢查是否為出發點或結束點
+                if (element.dataset.isStartingPoint === "true" || element.dataset.isEndPoint === "true") {
+                    continue; // 跳過出發點和結束點
+                }
+                
+                // 獲取索引並交換位置
+                const draggedIndex = parseInt(touchDraggedItem.dataset.destinationIndex);
+                const targetIndex = parseInt(element.dataset.destinationIndex);
+                
+                if (!isNaN(draggedIndex) && !isNaN(targetIndex)) {
+                    // 交換目的地順序
+                    const temp = destinations[draggedIndex];
+                    destinations[draggedIndex] = destinations[targetIndex];
+                    destinations[targetIndex] = temp;
+                    
+                    // 更新地圖和行程
+                    updateMap();
+                    updateItinerary();
+                }
+                
+                break;
+            }
+        }
+    }
+    
+    // 清理狀態
+    if (touchDraggedItem) {
+        touchDraggedItem.classList.remove('dragging');
+        touchDraggedItem = null;
+    }
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 }
 
 // 編輯停留時間功能
@@ -2542,4 +2705,48 @@ function manageItineraries() {
             }
         });
     });
+}
+
+// 從當日行程景點選擇一個作為當日結束地點
+function selectEndPointFromDay(dayIndex, destinationIndex) {
+    // 獲取行程分配
+    const days = distributeItineraryToDays();
+    
+    // 檢查天數是否有效
+    if (dayIndex >= days.length) {
+        alert(`第 ${dayIndex + 1} 天的行程尚未安排，無法設定結束地點`);
+        return;
+    }
+    
+    // 檢查目的地索引是否有效
+    const day = days[dayIndex];
+    if (destinationIndex >= destinations.length) {
+        alert('無效的目的地索引');
+        return;
+    }
+    
+    // 獲取目的地
+    const destination = destinations[destinationIndex];
+    if (!destination) {
+        alert('找不到指定的目的地');
+        return;
+    }
+    
+    // 檢查是否是出發點
+    const pointInDay = day.find(p => p.name === destination.name && 
+                             p.coordinates[0] === destination.coordinates[0] && 
+                             p.coordinates[1] === destination.coordinates[1]);
+    
+    if (!pointInDay) {
+        alert(`選擇的目的地不在第 ${dayIndex + 1} 天的行程中`);
+        return;
+    }
+    
+    if (pointInDay.isStartingPoint) {
+        alert('出發點不能設為結束地點');
+        return;
+    }
+    
+    // 使用現有的函數設置結束地點
+    setEndPointWithCoordinates(dayIndex, destination.name, destination.coordinates);
 }

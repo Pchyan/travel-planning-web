@@ -174,10 +174,31 @@ button:hover {
     margin-top: 5px;
 }
 
+.destination-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
 .destination-actions button {
     background-color: #e74c3c;
     padding: 5px 10px;
     font-size: 14px;
+}
+
+.set-endpoint-btn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.set-endpoint-btn:hover {
+    background-color: #388E3C;
 }
 
 .transportation {
@@ -239,6 +260,20 @@ footer {
     
     #map {
         height: 300px;
+    }
+    
+    .destination-item {
+        padding: 15px 10px;
+        touch-action: pan-y;
+    }
+    
+    .remove-btn {
+        padding: 8px 12px;
+        font-size: 16px;
+    }
+    
+    .dragging {
+        touch-action: none;
     }
 }
 
@@ -367,4 +402,55 @@ footer {
 
 #reset-day-settings {
     background-color: #9e9e9e;
+}
+
+/* 拖曳相關樣式 */
+.dragging {
+    opacity: 0.5;
+    background-color: #edf2f7;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    border: 2px dashed #4a89dc !important;
+    z-index: 1000;
+    position: relative;
+}
+
+.drag-over {
+    border: 2px dashed #4a89dc !important;
+    background-color: rgba(74, 137, 220, 0.1);
+}
+
+/* 結束地點樣式 */
+.destination-item[data-is-end-point="true"] {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4CAF50;
+    position: relative;
+}
+
+.destination-item[data-is-end-point="true"]::after {
+    content: "終點";
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: #4CAF50;
+    color: white;
+    font-size: 12px;
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+.remove-endpoint-btn {
+    background-color: #FF9800;
+    color: white;
+    border: none;
+    padding: 3px 6px;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    margin-top: 5px;
+    display: inline-block;
+}
+
+.remove-endpoint-btn:hover {
+    background-color: #F57C00;
 }
