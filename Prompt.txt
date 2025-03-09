@@ -1,0 +1,26 @@
+Prompt:
+
+Design and develop a web-based travel planning software that allows users to create and customize their travel itineraries. The software should provide an intuitive user interface with the following features:
+
+出发点输入：
+
+Users can input their starting point (e.g., city or location) when they begin using the tool.
+景点的灵活添加与删除：
+
+Users should be able to add new travel destinations to a list and remove any destination at any time, with an easy-to-use interface (e.g., a button for adding/removing).
+行程自动调整：
+
+The software should automatically adjust the order of the planned itinerary based on the current list of added destinations.
+交通方式建议：
+
+Between each pair of consecutive destinations, the system should suggest appropriate transportation options (e.g., by calling an API like Google Maps API for distance and travel time).
+景点停留时间建议：
+
+For each destination, the system should provide a recommended duration of stay based on typical visit durations (e.g., 1-2 hours for major attractions).
+总和行程时间管理：
+
+The software should automatically calculate the total time of the itinerary and adjust the order if the total exceeds a reasonable daily limit, moving any overflow to the next day.
+
+使用免費的地圖
+
+全程使用台灣繁體中文

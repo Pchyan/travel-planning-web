@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅遊規劃助手</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>旅遊規劃助手</h1>
+        </header>
+        
+        <main>
+            <section class="input-section">
+                <h2>行程規劃</h2>
+                <div class="starting-point">
+                    <label for="starting-point">出發點：</label>
+                    <input type="text" id="starting-point" placeholder="請輸入您的出發地點">
+                    <button id="set-starting-point">設定</button>
+                </div>
+                
+                <div class="save-load-buttons">
+                    <button id="save-itinerary">儲存行程</button>
+                    <button id="load-itinerary">讀取行程</button>
+                    <button id="manage-itinerary">管理行程</button>
+                </div>
+                
+                <div class="add-destination">
+                    <label for="new-destination">新增景點：</label>
+                    <input type="text" id="new-destination" placeholder="請輸入景點名稱">
+                    <button id="add-destination">新增</button>
+                    <button id="set-coordinates-mode">使用經緯度</button>
+                </div>
+                
+                <div id="coordinates-input-container" style="display: none;" class="coordinates-input">
+                    <div class="coordinates-row">
+                        <label for="latitude">緯度：</label>
+                        <input type="text" id="latitude" placeholder="-90 到 90">
+                    </div>
+                    <div class="coordinates-row">
+                        <label for="longitude">經度：</label>
+                        <input type="text" id="longitude" placeholder="-180 到 180">
+                    </div>
+                    <div class="coordinates-row">
+                        <label for="coordinates-name">位置名稱：</label>
+                        <input type="text" id="coordinates-name" placeholder="請輸入位置名稱">
+                    </div>
+                    <button id="set-coordinates">設定位置</button>
+                </div>
+            </section>
+            
+            <section class="itinerary-section">
+                <h2>行程安排</h2>
+                <div class="days-container">
+                    <!-- 行程天數將在這裡動態生成 -->
+                </div>
+            </section>
+            
+            <section class="map-section">
+                <h2>地圖預覽</h2>
+                <div id="map"></div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>旅遊規劃助手 &copy; 2023</p>
+        </footer>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="transportationSystems.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

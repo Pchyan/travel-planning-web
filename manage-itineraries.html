@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行程管理 - 旅遊規劃助手</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .itinerary-list {
+            margin-top: 20px;
+        }
+        
+        .itinerary-item {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .itinerary-info {
+            flex: 1;
+        }
+        
+        .itinerary-name {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+        
+        .itinerary-date {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .itinerary-stats {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .itinerary-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .itinerary-actions button {
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        
+        .rename-button {
+            background-color: #4a89dc;
+        }
+        
+        .delete-button {
+            background-color: #e74c3c;
+        }
+        
+        .load-button {
+            background-color: #2ecc71;
+        }
+        
+        .no-itineraries {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .back-button {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>行程管理</h1>
+        </header>
+        
+        <main>
+            <section class="manage-section">
+                <button id="back-to-planner" class="back-button">返回行程規劃</button>
+                
+                <h2>已儲存的行程</h2>
+                <div id="itinerary-list" class="itinerary-list">
+                    <!-- 行程列表將在這裡動態生成 -->
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>旅遊規劃助手 &copy; 2023</p>
+        </footer>
+    </div>
+    
+    <script>
+        // 顯示已儲存的行程列表
+        function displayItineraries() {
+            const itineraryListElement = document.getElementById('itinerary-list');
+            itineraryListElement.innerHTML = '';
+            
+            // 獲取已儲存的所有行程
+            const savedItineraries = JSON.parse(localStorage.getItem('saved_itineraries') || '{}');
+            const itineraryNames = Object.keys(savedItineraries);
+            
+            if (itineraryNames.length === 0) {
+                itineraryListElement.innerHTML = '<div class="no-itineraries">目前沒有已儲存的行程</div>';
+                return;
+            }
+            
+            // 按照儲存時間排序（最新的在前）
+            itineraryNames.sort((a, b) => {
+                const dateA = new Date(savedItineraries[a].savedAt);
+                const dateB = new Date(savedItineraries[b].savedAt);
+                return dateB - dateA;
+            });
+            
+            // 創建每個行程的項目
+            itineraryNames.forEach(name => {
+                const itinerary = savedItineraries[name];
+                const savedDate = new Date(itinerary.savedAt);
+                const formattedDate = savedDate.toLocaleString('zh-TW');
+                
+                // 計算行程統計資訊
+                const destinationsCount = itinerary.destinations.length;
+                
+                // 計算總天數
+                let totalDays = 1; // 至少一天
+                let totalHours = 0;
+                
+                // 計算總停留時間
+                itinerary.destinations.forEach(dest => {
+                    totalHours += dest.stayDuration || 0;
+                });
+                
+                // 估算天數（每天8小時）
+                totalDays = Math.ceil(totalHours / 8);
+                
+                const itineraryItem = document.createElement('div');
+                itineraryItem.className = 'itinerary-item';
+                itineraryItem.innerHTML = `
+                    <div class="itinerary-info">
+                        <div class="itinerary-name">${name}</div>
+                        <div class="itinerary-date">儲存於: ${formattedDate}</div>
+                        <div class="itinerary-stats">
+                            <span>${destinationsCount} 個景點</span> | 
+                            <span>預估 ${totalDays} 天行程</span>
+                        </div>
+                    </div>
+                    <div class="itinerary-actions">
+                        <button class="load-button" onclick="loadItinerary('${name}')">載入</button>
+                        <button class="rename-button" onclick="renameItinerary('${name}')">改名</button>
+                        <button class="delete-button" onclick="deleteItinerary('${name}')">刪除</button>
+                    </div>
+                `;
+                
+                itineraryListElement.appendChild(itineraryItem);
+            });
+        }
+        
+        // 載入行程
+        function loadItinerary(name) {
+            // 將選擇的行程名稱儲存到 sessionStorage
+            sessionStorage.setItem('selected_itinerary', name);
+            
+            // 跳轉回主頁面
+            window.location.href = 'index.html';
+        }
+        
+        // 重新命名行程
+        function renameItinerary(oldName) {
+            // 獲取已儲存的所有行程
+            const savedItineraries = JSON.parse(localStorage.getItem('saved_itineraries') || '{}');
+            
+            // 確保行程存在
+            if (!savedItineraries[oldName]) {
+                alert('找不到此行程！');
+                return;
+            }
+            
+            // 彈出對話框讓用戶輸入新的行程名稱
+            const newName = prompt('請輸入新的行程名稱：', oldName);
+            
+            if (!newName || newName === oldName) {
+                return; // 用戶取消或名稱未變
+            }
+            
+            // 檢查新名稱是否已存在
+            if (savedItineraries[newName]) {
+                alert('此名稱已被使用，請選擇其他名稱！');
+                return;
+            }
+            
+            // 複製行程到新名稱
+            savedItineraries[newName] = savedItineraries[oldName];
+            
+            // 刪除舊名稱的行程
+            delete savedItineraries[oldName];
+            
+            // 更新本地儲存
+            localStorage.setItem('saved_itineraries', JSON.stringify(savedItineraries));
+            
+            // 重新顯示行程列表
+            displayItineraries();
+            
+            alert(`行程「${oldName}」已成功重新命名為「${newName}」！`);
+        }
+        
+        // 刪除行程
+        function deleteItinerary(name) {
+            // 確認刪除
+            const isConfirmed = confirm(`確定要刪除行程「${name}」嗎？此操作無法復原。`);
+            
+            if (!isConfirmed) {
+                return;
+            }
+            
+            // 獲取已儲存的所有行程
+            const savedItineraries = JSON.parse(localStorage.getItem('saved_itineraries') || '{}');
+            
+            // 確保行程存在
+            if (!savedItineraries[name]) {
+                alert('找不到此行程！');
+                return;
+            }
+            
+            // 刪除行程
+            delete savedItineraries[name];
+            
+            // 更新本地儲存
+            localStorage.setItem('saved_itineraries', JSON.stringify(savedItineraries));
+            
+            // 重新顯示行程列表
+            displayItineraries();
+            
+            alert(`行程「${name}」已成功刪除！`);
+        }
+        
+        // 返回行程規劃頁面
+        document.getElementById('back-to-planner').addEventListener('click', function() {
+            window.location.href = 'index.html';
+        });
+        
+        // 頁面載入時顯示行程列表
+        document.addEventListener('DOMContentLoaded', function() {
+            displayItineraries();
+        });
+    </script>
+</body>
+</html>
