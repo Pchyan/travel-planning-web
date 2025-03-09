@@ -45,6 +45,7 @@
                     <button id="manage-itinerary">管理行程</button>
                     <button id="export-data">匯出資料</button>
                     <button id="import-data">匯入資料</button>
+                    <button id="repair-data" title="修復或重置損壞的數據">🛠️ 修復數據</button>
                 </div>
                 
                 <div class="add-destination">
@@ -55,6 +56,15 @@
                 </div>
                 
                 <div id="coordinates-input-container" style="display: none;" class="coordinates-input">
+                    <div class="coordinates-help">
+                        <p>如何從Google地圖獲取經緯度：</p>
+                        <ol>
+                            <li>在Google地圖中找到目標位置</li>
+                            <li>在位置上<strong>右鍵點擊</strong>選擇「這是哪裡？」</li>
+                            <li>地圖底部會顯示經緯度，例如 <code>25.0329694, 121.5654177</code></li>
+                            <li>將第一個數字填入「緯度」，第二個數字填入「經度」</li>
+                        </ol>
+                    </div>
                     <div class="coordinates-row">
                         <label for="latitude">緯度：</label>
                         <input type="text" id="latitude" placeholder="-90 到 90">

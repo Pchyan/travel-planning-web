@@ -472,3 +472,33 @@ footer {
     color: #E0E0E0;
     cursor: not-allowed;
 }
+
+/* 經緯度幫助說明樣式 */
+.coordinates-help {
+    background-color: #e8f5e9;
+    border-left: 4px solid #4CAF50;
+    padding: 10px 15px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+}
+
+.coordinates-help p {
+    font-weight: bold;
+    margin-bottom: 8px;
+    color: #2E7D32;
+}
+
+.coordinates-help ol {
+    margin-left: 20px;
+}
+
+.coordinates-help li {
+    margin-bottom: 5px;
+}
+
+.coordinates-help code {
+    background-color: #f1f1f1;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-family: monospace;
+}
