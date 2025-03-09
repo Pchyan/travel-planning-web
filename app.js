@@ -1290,7 +1290,10 @@ function updateItinerary() {
         const dayTitle = document.createElement('div');
         dayTitle.className = 'day-title';
         dayTitle.innerHTML = `
-            <span>第 ${dayIndex + 1} 天</span>
+            <div class="day-header">
+                <span>第 ${dayIndex + 1} 天</span>
+                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">在此日添加景點</button>
+            </div>
             <div class="day-settings">
                 <span>出發時間: ${departureTimeValue}</span>
                 <span>行程時間: ${maxHoursValue} 小時</span>
@@ -3254,4 +3257,450 @@ function repairLocalStorage() {
         console.error('修復本地存儲時發生錯誤:', error);
         alert(`修復過程中發生錯誤: ${error.message}`);
     }
+}
+
+// 允許在指定日期添加景點的函數
+async function addDestinationToSpecificDay(location, targetDayIndex) {
+    if (!startingPoint) {
+        alert('請先設置出發點！');
+        return;
+    }
+    
+    // 檢查目標日期是否有效
+    const days = distributeItineraryToDays();
+    if (targetDayIndex < 0 || targetDayIndex >= days.length) {
+        alert(`無效的日期：第 ${targetDayIndex + 1} 天不存在。請先安排足夠的行程。`);
+        return;
+    }
+    
+    try {
+        let coordinates;
+        
+        // 檢查緩存中是否有該位置的經緯度資料
+        if (locationCache[location]) {
+            coordinates = locationCache[location];
+            console.log(`使用緩存中的經緯度資料: ${location} -> [${coordinates[0]}, ${coordinates[1]}]`);
+        } else {
+            coordinates = await geocodeLocation(location);
+        }
+        
+        // 識別位置的國家和城市
+        const locationInfo = identifyLocation(coordinates[0], coordinates[1]);
+        const country = locationInfo.country;
+        const city = locationInfo.city;
+        
+        // 確定停留時間
+        const stayDuration = determineStayDuration(location);
+        
+        // 創建新景點
+        const newDestination = {
+            name: location,
+            coordinates: coordinates,
+            stayDuration: stayDuration,
+            country: country,
+            city: city
+        };
+        
+        // 計算新景點添加後該天的總時間
+        const dayInfo = calculateDayTimeWithNewDestination(targetDayIndex, newDestination);
+        
+        // 獲取當天設定
+        const daySetting = getDaySettings(targetDayIndex);
+        
+        // 檢查添加後是否超過當天時間限制
+        if (dayInfo.totalTime > daySetting.maxHours) {
+            // 超過時間限制，詢問是否調整
+            const overTime = (dayInfo.totalTime - daySetting.maxHours).toFixed(1);
+            const message = `添加景點「${location}」後，第 ${targetDayIndex + 1} 天的行程將超出時間限制 ${overTime} 小時。\n\n您是否希望：\n1. 調整當天其他景點的停留時間\n2. 增加當天的行程時間限制\n3. 取消添加`;
+            
+            const choice = prompt(message, "1");
+            
+            if (choice === "1") {
+                // 選擇調整當天其他景點的停留時間
+                const adjusted = adjustDayDestinationTimes(targetDayIndex, newDestination);
+                if (!adjusted) {
+                    alert('無法完成自動調整，請手動調整景點停留時間。');
+                    return;
+                }
+            } else if (choice === "2") {
+                // 選擇增加當天的時間限制
+                const newMaxHours = Math.ceil(dayInfo.totalTime * 10) / 10; // 四捨五入到小數點後一位
+                
+                // 更新或添加當天設定
+                const existingSettingIndex = dailySettings.findIndex(s => s.dayIndex === targetDayIndex);
+                if (existingSettingIndex >= 0) {
+                    dailySettings[existingSettingIndex].maxHours = newMaxHours;
+                } else {
+                    dailySettings.push({
+                        dayIndex: targetDayIndex,
+                        departureTime: daySetting.departureHours + ":" + (daySetting.departureMinutes < 10 ? "0" : "") + daySetting.departureMinutes,
+                        maxHours: newMaxHours
+                    });
+                }
+                
+                alert(`已將第 ${targetDayIndex + 1} 天的行程時間限制調整為 ${newMaxHours} 小時。`);
+            } else {
+                // 取消添加
+                alert('已取消添加景點。');
+                return;
+            }
+        }
+        
+        // 添加到目的地列表
+        destinations.push(newDestination);
+        
+        // 如果選擇的日期不是自動分配的日期，設置該景點為該日的結束點
+        const simulatedDays = distributeItineraryToDays();
+        const actualDayIndex = findDestinationDay(newDestination, simulatedDays);
+        
+        if (actualDayIndex !== targetDayIndex) {
+            // 設置為目標日的結束點，以確保它在正確的日期
+            setEndPointWithCoordinates(targetDayIndex, newDestination.name, newDestination.coordinates);
+            
+            // 如果下一天也有結束點，則將下一天的結束點重置
+            if (targetDayIndex + 1 < simulatedDays.length) {
+                const nextDayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === targetDayIndex + 1);
+                if (nextDayEndPoint) {
+                    removeDayEndPoint(targetDayIndex + 1);
+                }
+            }
+        }
+        
+        // 更新地圖和行程
+        updateMap();
+        updateItinerary();
+        
+        // 保存當前狀態
+        saveStateToHistory();
+        
+        alert(`已成功添加景點「${location}」到第 ${targetDayIndex + 1} 天的行程中。`);
+        
+    } catch (error) {
+        console.error('添加景點到指定日期時出錯:', error);
+        alert(`添加景點失敗: ${error.message}`);
+    }
+}
+
+// 計算新增景點後當天的總時間
+function calculateDayTimeWithNewDestination(dayIndex, newDestination) {
+    const days = distributeItineraryToDays();
+    
+    if (dayIndex < 0 || dayIndex >= days.length) {
+        return { totalTime: 0, destinations: [] };
+    }
+    
+    const day = days[dayIndex];
+    let dayDestinations = [...day];
+    
+    // 假設新景點添加到當天的最後
+    const lastPoint = dayDestinations[dayDestinations.length - 1];
+    
+    // 計算從最後一個點到新景點的交通時間
+    const transportation = determineTransportation(
+        lastPoint.coordinates,
+        newDestination.coordinates
+    );
+    
+    // 計算當前已用時間
+    let currentDayTime = 0;
+    for (let i = 1; i < dayDestinations.length; i++) {
+        const point = dayDestinations[i];
+        if (point.transportationFromPrevious) {
+            currentDayTime += point.transportationFromPrevious.time;
+        }
+        
+        // 加上停留時間，最後一個點不算停留時間
+        if (i < dayDestinations.length - 1 && !point.isEndPoint) {
+            currentDayTime += point.stayDuration;
+        }
+    }
+    
+    // 加上新景點的交通時間和停留時間
+    const totalTime = currentDayTime + transportation.time + newDestination.stayDuration;
+    
+    return {
+        totalTime: totalTime,
+        currentDayTime: currentDayTime,
+        transportationTime: transportation.time,
+        dayDestinations: dayDestinations
+    };
+}
+
+// 自動調整當天景點的停留時間
+function adjustDayDestinationTimes(dayIndex, newDestination) {
+    const dayInfo = calculateDayTimeWithNewDestination(dayIndex, newDestination);
+    const days = distributeItineraryToDays();
+    
+    if (dayIndex < 0 || dayIndex >= days.length) {
+        return false;
+    }
+    
+    const day = days[dayIndex];
+    const daySetting = getDaySettings(dayIndex);
+    
+    // 需要減少的時間
+    const targetReduction = dayInfo.totalTime - daySetting.maxHours;
+    
+    if (targetReduction <= 0) {
+        return true; // 不需要調整
+    }
+    
+    // 顯示調整界面
+    showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestination);
+    return true;
+}
+
+// 查找景點在哪一天
+function findDestinationDay(destination, days) {
+    for (let i = 0; i < days.length; i++) {
+        const day = days[i];
+        for (let j = 0; j < day.length; j++) {
+            const point = day[j];
+            if (point.name === destination.name && 
+                Math.abs(point.coordinates[0] - destination.coordinates[0]) < 0.0000001 && 
+                Math.abs(point.coordinates[1] - destination.coordinates[1]) < 0.0000001) {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+
+// 顯示停留時間調整對話框
+function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestination) {
+    // 創建對話框
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+    
+    const dialogContent = document.createElement('div');
+    dialogContent.style.cssText = `
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        max-width: 800px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+    `;
+    
+    dialogContent.innerHTML = `
+        <h3>調整第 ${dayIndex + 1} 天的景點停留時間</h3>
+        <p>您想添加的景點「${newDestination.name}」需要 ${newDestination.stayDuration.toFixed(1)} 小時停留時間和約 ${calculateDayTimeWithNewDestination(dayIndex, newDestination).transportationTime.toFixed(1)} 小時交通時間。</p>
+        <p>需要減少總計 <strong>${targetReduction.toFixed(1)} 小時</strong> 才能符合當天時間限制。</p>
+        <p>請調整以下景點的停留時間：</p>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr>
+                <th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">景點</th>
+                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">當前停留時間 (小時)</th>
+                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">新停留時間 (小時)</th>
+            </tr>
+            ${day.map((point, index) => {
+                if (point.isStartingPoint || point.isEndPoint) return '';
+                const destinationIndex = destinations.findIndex(d => 
+                    d.name === point.name && 
+                    Math.abs(d.coordinates[0] - point.coordinates[0]) < 0.0000001 && 
+                    Math.abs(d.coordinates[1] - point.coordinates[1]) < 0.0000001
+                );
+                if (destinationIndex < 0) return '';
+                return `
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">${point.name}</td>
+                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">${point.stayDuration.toFixed(1)}</td>
+                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">
+                            <input type="number" min="0" max="${point.stayDuration}" step="0.1" value="${Math.max(0, point.stayDuration - targetReduction / (day.length - 1)).toFixed(1)}" 
+                                data-index="${destinationIndex}" class="time-adjustment-input" style="width: 70px;">
+                        </td>
+                    </tr>
+                `;
+            }).join('')}
+        </table>
+        <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+            <div>
+                <span>剩餘需減少時間：</span>
+                <span id="remaining-reduction">${targetReduction.toFixed(1)}</span>
+                <span> 小時</span>
+            </div>
+            <div>
+                <button id="apply-time-adjustments" style="background-color: #4CAF50; color: white; margin-right: 10px;">應用調整</button>
+                <button id="cancel-time-adjustments">取消</button>
+            </div>
+        </div>
+    `;
+    
+    dialog.appendChild(dialogContent);
+    document.body.appendChild(dialog);
+    
+    // 計算剩餘需減少的時間
+    let remainingReduction = targetReduction;
+    const timeInputs = dialogContent.querySelectorAll('.time-adjustment-input');
+    
+    timeInputs.forEach(input => {
+        input.addEventListener('input', () => {
+            let totalReduction = 0;
+            timeInputs.forEach(inp => {
+                const destIndex = parseInt(inp.dataset.index);
+                const originalTime = destinations[destIndex].stayDuration;
+                const newTime = parseFloat(inp.value) || 0;
+                totalReduction += Math.max(0, originalTime - newTime);
+            });
+            
+            const remainingElement = document.getElementById('remaining-reduction');
+            remainingReduction = targetReduction - totalReduction;
+            remainingElement.textContent = remainingReduction.toFixed(1);
+            remainingElement.style.color = remainingReduction <= 0 ? 'green' : 'red';
+        });
+    });
+    
+    // 應用按鈕事件
+    document.getElementById('apply-time-adjustments').addEventListener('click', () => {
+        if (remainingReduction > 0) {
+            if (!confirm('尚未完全減少所需時間。是否仍要應用這些調整並增加當天的時間限制？')) {
+                return;
+            }
+            
+            // 增加當天時間限制
+            const daySetting = getDaySettings(dayIndex);
+            const newMaxHours = daySetting.maxHours + remainingReduction;
+            
+            const existingSettingIndex = dailySettings.findIndex(s => s.dayIndex === dayIndex);
+            if (existingSettingIndex >= 0) {
+                dailySettings[existingSettingIndex].maxHours = newMaxHours;
+            } else {
+                dailySettings.push({
+                    dayIndex: dayIndex,
+                    departureTime: daySetting.departureHours + ":" + (daySetting.departureMinutes < 10 ? "0" : "") + daySetting.departureMinutes,
+                    maxHours: newMaxHours
+                });
+            }
+            
+            alert(`已將第 ${dayIndex + 1} 天的行程時間限制調整為 ${newMaxHours.toFixed(1)} 小時。`);
+        }
+        
+        // 應用所有調整
+        timeInputs.forEach(input => {
+            const destIndex = parseInt(input.dataset.index);
+            const newTime = parseFloat(input.value) || 0;
+            if (!isNaN(destIndex) && destIndex >= 0 && destIndex < destinations.length) {
+                destinations[destIndex].stayDuration = newTime;
+            }
+        });
+        
+        // 添加新景點
+        destinations.push(newDestination);
+        
+        // 更新界面
+        updateMap();
+        updateItinerary();
+        
+        // 保存狀態
+        saveStateToHistory();
+        
+        // 關閉對話框
+        document.body.removeChild(dialog);
+        
+        alert(`已成功添加景點「${newDestination.name}」到第 ${dayIndex + 1} 天的行程中。`);
+    });
+    
+    // 取消按鈕事件
+    document.getElementById('cancel-time-adjustments').addEventListener('click', () => {
+        document.body.removeChild(dialog);
+    });
+}
+
+// 顯示添加景點到特定日期的對話框
+function showAddToSpecificDayDialog(dayIndex) {
+    // 創建對話框
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    `;
+    
+    const dialogContent = document.createElement('div');
+    dialogContent.style.cssText = `
+        background: white;
+        padding: 20px;
+        border-radius: 5px;
+        max-width: 500px;
+        width: 90%;
+    `;
+    
+    dialogContent.innerHTML = `
+        <h3>添加景點到第 ${dayIndex + 1} 天</h3>
+        <div style="margin-bottom: 15px;">
+            <label for="specific-day-destination" style="display: block; margin-bottom: 5px;">景點名稱：</label>
+            <input type="text" id="specific-day-destination" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="請輸入景點名稱">
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+            <button id="add-to-day-confirm" style="background-color: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">添加</button>
+            <button id="add-to-day-cancel" style="background-color: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">取消</button>
+        </div>
+        <p style="margin-top: 15px; font-size: 14px; color: #666;">
+            提示：如果景點添加後超出當天時間限制，系統將提供調整選項，
+            您可以選擇減少其他景點的停留時間或增加當天的行程時間限制。
+        </p>
+    `;
+    
+    dialog.appendChild(dialogContent);
+    document.body.appendChild(dialog);
+    
+    // 獲取輸入框並聚焦
+    const input = document.getElementById('specific-day-destination');
+    setTimeout(() => input.focus(), 100);
+    
+    // 確認按鈕事件
+    document.getElementById('add-to-day-confirm').addEventListener('click', async () => {
+        const destination = input.value.trim();
+        if (!destination) {
+            alert('請輸入景點名稱');
+            return;
+        }
+        
+        // 關閉對話框
+        document.body.removeChild(dialog);
+        
+        // 在指定日期添加景點
+        await addDestinationToSpecificDay(destination, dayIndex);
+    });
+    
+    // 取消按鈕事件
+    document.getElementById('add-to-day-cancel').addEventListener('click', () => {
+        document.body.removeChild(dialog);
+    });
+    
+    // 輸入框回車事件
+    input.addEventListener('keyup', async (e) => {
+        if (e.key === 'Enter') {
+            const destination = input.value.trim();
+            if (!destination) {
+                alert('請輸入景點名稱');
+                return;
+            }
+            
+            // 關閉對話框
+            document.body.removeChild(dialog);
+            
+            // 在指定日期添加景點
+            await addDestinationToSpecificDay(destination, dayIndex);
+        }
+    });
 }

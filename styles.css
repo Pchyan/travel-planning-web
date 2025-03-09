@@ -502,3 +502,26 @@ footer {
     border-radius: 3px;
     font-family: monospace;
 }
+
+/* 日期標題和添加景點按鈕 */
+.day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.add-to-day-btn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.add-to-day-btn:hover {
+    background-color: #388E3C;
+}
