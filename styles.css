@@ -454,3 +454,21 @@ footer {
 .remove-endpoint-btn:hover {
     background-color: #F57C00;
 }
+
+/* Undo/Redo 按鈕樣式 */
+#undo-button, #redo-button {
+    background-color: #607D8B;
+    font-size: 14px;
+    margin-right: 8px;
+    padding: 8px 12px;
+}
+
+#undo-button:hover, #redo-button:hover {
+    background-color: #455A64;
+}
+
+#undo-button:disabled, #redo-button:disabled {
+    background-color: #B0BEC5;
+    color: #E0E0E0;
+    cursor: not-allowed;
+}

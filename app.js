@@ -21,6 +21,11 @@ const SAVED_ITINERARIES_KEY = 'saved_itineraries';
 const LOCATION_CACHE_KEY = 'location_cache';
 const LOCATION_MANAGER_ID = 'location-manager-dialog';
 
+// Undo/Redo 功能相關變量
+let historyStates = []; // 儲存歷史狀態
+let currentHistoryIndex = -1; // 當前歷史狀態的索引
+const MAX_HISTORY_STATES = 30; // 最大歷史記錄數量
+
 // 當前選擇的國家和城市
 let currentCountry = '台灣';
 let currentCity = '台北';
@@ -416,6 +421,31 @@ function initEventListeners() {
     document.getElementById('import-data').addEventListener('click', function() {
         importData();
     });
+    
+    // Undo 和 Redo 按鈕
+    document.getElementById('undo-button').addEventListener('click', undoAction);
+    document.getElementById('redo-button').addEventListener('click', redoAction);
+    
+    // 添加鍵盤快捷鍵
+    document.addEventListener('keydown', function(e) {
+        // 檢查是否在輸入框中
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // Ctrl+Z 或 Command+Z（Mac）用於復原操作
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault();
+            undoAction();
+        }
+        
+        // Ctrl+Y、Command+Y（Mac）或 Ctrl+Shift+Z 用於重做操作
+        if (((e.ctrlKey || e.metaKey) && e.key === 'y') || 
+            ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) {
+            e.preventDefault();
+            redoAction();
+        }
+    });
 }
 
 // 设置出发点
@@ -443,6 +473,9 @@ async function setStartingPoint(location) {
         alert(`無法找到位置: ${location}。請嘗試更具體的地址。`);
         console.error('Geocoding error:', error);
     }
+    
+    // 保存當前狀態
+    saveStateToHistory();
 }
 
 // 添加景点
@@ -495,6 +528,9 @@ async function addDestination(location) {
         alert(`無法找到位置: ${location}。請嘗試更具體的地址。`);
         console.error('Geocoding error:', error);
     }
+    
+    // 保存當前狀態
+    saveStateToHistory();
 }
 
 // 删除景点
@@ -516,6 +552,9 @@ function removeDestination(index) {
     updateItinerary();
     
     console.log(`已刪除景點 #${index + 1}: ${destinationName}`);
+    
+    // 保存當前狀態
+    saveStateToHistory();
 }
 
 // 地理编码：将地址转换为坐标
@@ -615,7 +654,8 @@ function optimizeItinerary() {
         }
         
         // 添加到优化后的行程中
-        optimizedDestinations.push(remainingDestinations[nearestIndex]);
+        const nextDestination = remainingDestinations[nearestIndex];
+        optimizedDestinations.push(nextDestination);
         remainingDestinations.splice(nearestIndex, 1);
     }
     
@@ -655,6 +695,20 @@ function distributeItineraryToDays() {
         stayDuration: 0 // 確保出發點不計入停留時間
     });
     
+    // 檢查當前天是否有設定結束地點
+    const checkDayEndPoint = (dayIndex, destination) => {
+        const dayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === dayIndex);
+        
+        if (!dayEndPoint) return false;
+        
+        // 精確比較名稱和座標，避免誤判
+        return (
+            destination.name === dayEndPoint.endPoint.name && 
+            Math.abs(destination.coordinates[0] - dayEndPoint.endPoint.coordinates[0]) < 0.0000001 && 
+            Math.abs(destination.coordinates[1] - dayEndPoint.endPoint.coordinates[1]) < 0.0000001
+        );
+    };
+    
     // 遍歷所有目的地
     for (let i = 0; i < destinations.length; i++) {
         const destination = destinations[i];
@@ -669,20 +723,17 @@ function distributeItineraryToDays() {
         // 計算加上當前景點後的總時間
         const totalTimeWithCurrentDestination = currentDayDuration + transportation.time + destination.stayDuration;
         
-        // 檢查當前天是否有設定結束地點
-        const dayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === currentDayIndex);
+        // 檢查是否是當天的結束地點
+        const isEndPoint = checkDayEndPoint(currentDayIndex, destination);
         
         // 檢查是否是當天的最後一個景點
         const isLastDestination = 
             (i === destinations.length - 1) || 
             (totalTimeWithCurrentDestination > currentDaySettings.maxHours) ||
-            // 如果當前景點是設定的結束地點，則視為當天的最後一個景點
-            (dayEndPoint && destination.name === dayEndPoint.endPoint.name && 
-             destination.coordinates[0] === dayEndPoint.endPoint.coordinates[0] && 
-             destination.coordinates[1] === dayEndPoint.endPoint.coordinates[1]);
+            isEndPoint; // 使用新的判斷方法
         
         // 記錄時間計算結果，幫助調試
-        console.log(`景點 ${destination.name} - 當前天數: ${currentDayIndex+1}, 當前累積時間: ${currentDayDuration}, 交通時間: ${transportation.time}, 停留時間: ${destination.stayDuration}, 總計: ${totalTimeWithCurrentDestination}, 最大限制: ${currentDaySettings.maxHours}, 是否是結束地點: ${dayEndPoint && destination.name === dayEndPoint.endPoint.name}, 是否是最後一個景點: ${isLastDestination}`);
+        console.log(`景點 ${destination.name} - 當前天數: ${currentDayIndex+1}, 當前累積時間: ${currentDayDuration}, 交通時間: ${transportation.time}, 停留時間: ${destination.stayDuration}, 總計: ${totalTimeWithCurrentDestination}, 最大限制: ${currentDaySettings.maxHours}, 是否是結束地點: ${isEndPoint}, 是否是最後一個景點: ${isLastDestination}`);
         
         // 如果是當天最後一個景點，暫時不計入停留時間
         const effectiveStayDuration = isLastDestination ? 0 : destination.stayDuration;
@@ -721,10 +772,7 @@ function distributeItineraryToDays() {
         const needNextDay = 
             (totalTimeWithCurrentDestination > currentDaySettings.maxHours) || 
             // 如果這個景點是結束地點，且不是最後一個景點，則下一個景點需要進入下一天
-            (dayEndPoint && destination.name === dayEndPoint.endPoint.name && 
-             destination.coordinates[0] === dayEndPoint.endPoint.coordinates[0] && 
-             destination.coordinates[1] === dayEndPoint.endPoint.coordinates[1] && 
-             i < destinations.length - 1);
+            (isEndPoint && i < destinations.length - 1);
         
         if (needNextDay) {
             // 如果超過當天時間限制或者是設定的結束地點，進入下一天
@@ -736,7 +784,7 @@ function distributeItineraryToDays() {
                 transportationFromPrevious: transportation,
                 arrivalTime: formatTime(arrivalTime),
                 effectiveStayDuration: 0, // 結束地點不計停留時間
-                isEndPoint: dayEndPoint && destination.name === dayEndPoint.endPoint.name
+                isEndPoint: isEndPoint
             });
             
             // 更新當天行程時間（只計算交通時間，不計算停留時間）
@@ -776,7 +824,7 @@ function distributeItineraryToDays() {
             currentDayDuration = 0;
             
             // 如果這是一個結束地點且不是所有景點的最後一個，跳到下一個景點
-            if (dayEndPoint && destination.name === dayEndPoint.endPoint.name && i < destinations.length - 1) {
+            if (isEndPoint && i < destinations.length - 1) {
                 continue;
             }
         } else {
@@ -787,7 +835,7 @@ function distributeItineraryToDays() {
                 transportationFromPrevious: transportation,
                 arrivalTime: formatTime(arrivalTime),
                 effectiveStayDuration: effectiveStayDuration,
-                isEndPoint: dayEndPoint && destination.name === dayEndPoint.endPoint.name
+                isEndPoint: isEndPoint
             });
             
             // 更新當天行程時間
@@ -1510,6 +1558,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // 載入選定的行程
         loadSelectedItinerary(selectedItineraryName);
     }
+    
+    // 應用程式初始化後，保存第一個狀態到歷史記錄
+    setTimeout(() => {
+        saveStateToHistory();
+        console.log('已保存初始狀態到歷史記錄');
+    }, 1000);
 });
 
 // 根據交通方式和起訖點打開交通查詢網站
@@ -1570,6 +1624,15 @@ function handleDragStart(e) {
     // 如果是出發點或結束點，則不允許拖曳
     if (this.dataset.isStartingPoint === "true" || this.dataset.isEndPoint === "true") {
         e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+    
+    // 在拖曳前先檢查，確保相同元素不會在拖曳中被修改屬性
+    const destinationIndex = parseInt(this.dataset.destinationIndex);
+    if (isNaN(destinationIndex) || destinationIndex < 0 || destinationIndex >= destinations.length) {
+        e.preventDefault();
+        e.stopPropagation();
         return false;
     }
     
@@ -1621,7 +1684,12 @@ function handleDrop(e) {
         const draggedIndex = parseInt(draggedItem.dataset.destinationIndex);
         const targetIndex = parseInt(this.dataset.destinationIndex);
         
-        if (!isNaN(draggedIndex) && !isNaN(targetIndex)) {
+        if (!isNaN(draggedIndex) && !isNaN(targetIndex) && 
+            draggedIndex >= 0 && draggedIndex < destinations.length &&
+            targetIndex >= 0 && targetIndex < destinations.length) {
+            
+            console.log(`交換目的地: 從索引 ${draggedIndex}(${destinations[draggedIndex].name}) 到 ${targetIndex}(${destinations[targetIndex].name})`);
+            
             // 交換目的地順序
             const temp = destinations[draggedIndex];
             destinations[draggedIndex] = destinations[targetIndex];
@@ -1630,6 +1698,11 @@ function handleDrop(e) {
             // 更新地圖和行程
             updateMap();
             updateItinerary();
+            
+            // 保存當前狀態
+            saveStateToHistory();
+        } else {
+            console.error(`無法交換目的地: 無效的索引 (拖曳: ${draggedIndex}, 目標: ${targetIndex})`);
         }
     }
     
@@ -1720,7 +1793,12 @@ function handleTouchEnd(e) {
                 const draggedIndex = parseInt(touchDraggedItem.dataset.destinationIndex);
                 const targetIndex = parseInt(element.dataset.destinationIndex);
                 
-                if (!isNaN(draggedIndex) && !isNaN(targetIndex)) {
+                if (!isNaN(draggedIndex) && !isNaN(targetIndex) && 
+                    draggedIndex >= 0 && draggedIndex < destinations.length &&
+                    targetIndex >= 0 && targetIndex < destinations.length) {
+                    
+                    console.log(`觸摸交換目的地: 從索引 ${draggedIndex}(${destinations[draggedIndex].name}) 到 ${targetIndex}(${destinations[targetIndex].name})`);
+                    
                     // 交換目的地順序
                     const temp = destinations[draggedIndex];
                     destinations[draggedIndex] = destinations[targetIndex];
@@ -1729,6 +1807,11 @@ function handleTouchEnd(e) {
                     // 更新地圖和行程
                     updateMap();
                     updateItinerary();
+                    
+                    // 保存當前狀態
+                    saveStateToHistory();
+                } else {
+                    console.error(`觸摸無法交換目的地: 無效的索引 (拖曳: ${draggedIndex}, 目標: ${targetIndex})`);
                 }
                 
                 break;
@@ -1774,6 +1857,9 @@ function editStayDuration(index) {
     updateItinerary();
     
     console.log(`已更新「${destination.name}」的停留時間為 ${parsedDuration} 小時`);
+    
+    // 保存當前狀態
+    saveStateToHistory();
 }
 
 // 優化單天行程順序功能
@@ -2131,6 +2217,9 @@ function editDaySettings(dayIndex) {
             // 重新計算和顯示行程
             updateItinerary();
         }
+        
+        // 保存當前狀態
+        saveStateToHistory();
     });
     
     // 移除結束地點
@@ -2523,6 +2612,10 @@ function setEndPointWithCoordinates(dayIndex, locationName, coordinates) {
         });
     }
     
+    // 打印日誌以幫助調試
+    console.log(`設置第 ${dayIndex + 1} 天結束地點：${locationName}，座標：[${coordinates[0]}, ${coordinates[1]}]`);
+    console.log(`當前所有結束地點設定：`, JSON.stringify(dailyEndPoints));
+    
     // 保存到本地儲存
     saveToLocalStorage();
     
@@ -2530,6 +2623,9 @@ function setEndPointWithCoordinates(dayIndex, locationName, coordinates) {
     updateItinerary();
     
     alert(`已設定第 ${dayIndex + 1} 天的結束地點為: ${locationName}`);
+    
+    // 保存當前狀態
+    saveStateToHistory();
 }
 
 // 移除每天行程的結束地點
@@ -2539,6 +2635,10 @@ function removeDayEndPoint(dayIndex) {
     if (existingEndPointIndex >= 0) {
         const endPointName = dailyEndPoints[existingEndPointIndex].endPoint.name;
         dailyEndPoints.splice(existingEndPointIndex, 1);
+        
+        // 打印日誌以幫助調試
+        console.log(`移除第 ${dayIndex + 1} 天結束地點：${endPointName}`);
+        console.log(`當前所有結束地點設定：`, JSON.stringify(dailyEndPoints));
         
         // 保存到本地儲存
         saveToLocalStorage();
@@ -2550,6 +2650,9 @@ function removeDayEndPoint(dayIndex) {
     } else {
         alert(`第 ${dayIndex + 1} 天沒有設定結束地點`);
     }
+    
+    // 保存當前狀態
+    saveStateToHistory();
 }
 
 // 保存設定到本地儲存
@@ -2720,7 +2823,7 @@ function selectEndPointFromDay(dayIndex, destinationIndex) {
     
     // 檢查目的地索引是否有效
     const day = days[dayIndex];
-    if (destinationIndex >= destinations.length) {
+    if (destinationIndex >= destinations.length || destinationIndex < 0) {
         alert('無效的目的地索引');
         return;
     }
@@ -2732,21 +2835,127 @@ function selectEndPointFromDay(dayIndex, destinationIndex) {
         return;
     }
     
-    // 檢查是否是出發點
-    const pointInDay = day.find(p => p.name === destination.name && 
-                             p.coordinates[0] === destination.coordinates[0] && 
-                             p.coordinates[1] === destination.coordinates[1]);
+    // 確認此景點確實在當天的行程中
+    const pointInDay = day.find(p => 
+        p.name === destination.name && 
+        p.coordinates[0] === destination.coordinates[0] && 
+        p.coordinates[1] === destination.coordinates[1]
+    );
     
     if (!pointInDay) {
         alert(`選擇的目的地不在第 ${dayIndex + 1} 天的行程中`);
         return;
     }
     
+    // 檢查是否是出發點
     if (pointInDay.isStartingPoint) {
         alert('出發點不能設為結束地點');
         return;
     }
     
+    // 確認是否要設定為結束地點
+    const confirmed = confirm(`確定要將「${destination.name}」設定為第 ${dayIndex + 1} 天的結束地點嗎？`);
+    if (!confirmed) {
+        return;
+    }
+    
     // 使用現有的函數設置結束地點
     setEndPointWithCoordinates(dayIndex, destination.name, destination.coordinates);
+}
+
+// 保存當前狀態到歷史記錄
+function saveStateToHistory() {
+    // 創建當前應用程式狀態的快照
+    const currentState = {
+        startingPoint: JSON.parse(JSON.stringify(startingPoint || null)),
+        destinations: JSON.parse(JSON.stringify(destinations)),
+        dailySettings: JSON.parse(JSON.stringify(dailySettings)),
+        dailyEndPoints: JSON.parse(JSON.stringify(dailyEndPoints)),
+        departureTime: departureTime,
+        maxDailyHours: maxDailyHours
+    };
+    
+    // 如果當前不在最後一個歷史狀態，刪除之後的所有狀態
+    if (currentHistoryIndex < historyStates.length - 1) {
+        historyStates = historyStates.slice(0, currentHistoryIndex + 1);
+    }
+    
+    // 添加新狀態到歷史記錄
+    historyStates.push(currentState);
+    currentHistoryIndex = historyStates.length - 1;
+    
+    // 如果歷史記錄超過最大限制，刪除最舊的狀態
+    if (historyStates.length > MAX_HISTORY_STATES) {
+        historyStates.shift();
+        currentHistoryIndex--;
+    }
+    
+    // 更新 Undo/Redo 按鈕狀態
+    updateUndoRedoButtons();
+    
+    console.log(`保存歷史狀態 #${currentHistoryIndex}，共 ${historyStates.length} 個狀態`);
+}
+
+// 從歷史記錄恢復狀態
+function restoreStateFromHistory(stateIndex) {
+    if (stateIndex < 0 || stateIndex >= historyStates.length) {
+        console.error(`嘗試恢復無效的歷史狀態索引: ${stateIndex}`);
+        return;
+    }
+    
+    const state = historyStates[stateIndex];
+    
+    // 恢復應用程式狀態
+    startingPoint = state.startingPoint;
+    destinations = state.destinations;
+    dailySettings = state.dailySettings;
+    dailyEndPoints = state.dailyEndPoints;
+    departureTime = state.departureTime;
+    maxDailyHours = state.maxDailyHours;
+    
+    // 更新 UI
+    updateMap();
+    updateItinerary();
+    
+    // 更新歷史索引
+    currentHistoryIndex = stateIndex;
+    
+    // 更新 Undo/Redo 按鈕狀態
+    updateUndoRedoButtons();
+    
+    console.log(`恢復到歷史狀態 #${currentHistoryIndex}`);
+}
+
+// 執行撤銷操作 (Undo)
+function undoAction() {
+    if (currentHistoryIndex <= 0) {
+        console.log("無法撤銷：已經是最早的狀態");
+        return;
+    }
+    
+    restoreStateFromHistory(currentHistoryIndex - 1);
+}
+
+// 執行重做操作 (Redo)
+function redoAction() {
+    if (currentHistoryIndex >= historyStates.length - 1) {
+        console.log("無法重做：已經是最新的狀態");
+        return;
+    }
+    
+    restoreStateFromHistory(currentHistoryIndex + 1);
+}
+
+// 更新 Undo/Redo 按鈕的啟用/禁用狀態
+function updateUndoRedoButtons() {
+    const undoButton = document.getElementById('undo-button');
+    const redoButton = document.getElementById('redo-button');
+    
+    if (undoButton) {
+        undoButton.disabled = currentHistoryIndex <= 0;
+    }
+    
+    if (redoButton) {
+        redoButton.disabled = currentHistoryIndex >= historyStates.length - 1;
+    }
 }
