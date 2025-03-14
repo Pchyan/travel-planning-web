@@ -1263,43 +1263,104 @@ function updateItinerary() {
     daysContainer.innerHTML = '';
     
     if (!startingPoint) {
-        daysContainer.innerHTML = '<p>請先設置出發點</p>';
+        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/5578/5578703.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請先設置出發點</p></div>';
         return;
     }
     
     if (destinations.length === 0) {
-        daysContainer.innerHTML = '<p>請添加景點</p>';
+        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/1041/1041728.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請添加景點</p></div>';
         return;
     }
     
     // 分配行程到多天
     const days = distributeItineraryToDays();
     
+    // 獲取當前日期，用於計算行程日期
+    const today = new Date();
+    const departureDate = document.getElementById('departure-date')?.value;
+    let tripStartDate;
+    
+    if (departureDate) {
+        tripStartDate = new Date(departureDate);
+    } else {
+        tripStartDate = new Date();
+    }
+    
     // 创建每天的行程卡片
     days.forEach((day, dayIndex) => {
+        // 計算當前行程日期
+        const currentDate = new Date(tripStartDate);
+        currentDate.setDate(tripStartDate.getDate() + dayIndex);
+        const formattedDate = formatDateWithLunar(currentDate);
+        
         const dayCard = document.createElement('div');
         dayCard.className = 'day-card';
         dayCard.dataset.dayIndex = dayIndex;
+        
+        // 設置卡片的基本樣式
+        if (dayIndex % 2 === 0) {
+            dayCard.style.backgroundColor = '#f9f9f9';
+        } else {
+            dayCard.style.backgroundColor = '#ffffff';
+        }
         
         // 獲取當天的設定
         const daySetting = dailySettings.find(setting => setting.dayIndex === dayIndex);
         const departureTimeValue = daySetting ? daySetting.departureTime : departureTime;
         const maxHoursValue = daySetting ? daySetting.maxHours : maxDailyHours;
         
+        // 計算當天已安排的時間
+        let scheduledHours = 0;
+        day.forEach((point, index) => {
+            if (index > 0) { // 跳過起點
+                scheduledHours += point.transportationFromPrevious.time;
+                if (!point.isEndPoint) {
+                    scheduledHours += point.stayDuration;
+                }
+            }
+        });
+        
+        // 計算剩餘時間
+        const remainingHours = Math.max(0, maxHoursValue - scheduledHours);
+        const scheduledPercentage = Math.min(100, (scheduledHours / maxHoursValue) * 100);
+        
         // 创建天数标题和设置
         const dayTitle = document.createElement('div');
         dayTitle.className = 'day-title';
         dayTitle.innerHTML = `
             <div class="day-header">
-                <span>第 ${dayIndex + 1} 天</span>
-                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">在此日添加景點</button>
+                <div>
+                    <h3 style="margin: 0; color: #4a89dc;">第 ${dayIndex + 1} 天</h3>
+                    <div style="font-size: 14px; color: #666; margin-top: 5px;">${formattedDate}</div>
+                </div>
+                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">
+                    <i class="fas fa-plus"></i> 在此日添加景點
+                </button>
             </div>
-            <div class="day-settings">
-                <span>出發時間: ${departureTimeValue}</span>
-                <span>行程時間: ${maxHoursValue} 小時</span>
-                <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">設定</button>
+            <div class="day-info" style="display: flex; justify-content: space-between; margin: 15px 0;">
+                <div class="day-settings">
+                    <div style="margin-bottom: 5px;">
+                        <i class="far fa-clock"></i> 出發時間: <strong>${departureTimeValue}</strong>
+                    </div>
+                    <div>
+                        <i class="fas fa-hourglass-half"></i> 行程時間: <strong>${maxHoursValue}</strong> 小時 
+                        <span style="font-size: 12px; color: #666;">(已安排: ${scheduledHours.toFixed(1)} 小時)</span>
+                    </div>
+                </div>
+                <div>
+                    <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">
+                        <i class="fas fa-cog"></i> 設定
+                    </button>
+                </div>
             </div>
-            <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">建議行程順序</button>
+            <div class="time-progress" style="height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-bottom: 15px;">
+                <div style="height: 100%; width: ${scheduledPercentage}%; background-color: ${scheduledPercentage > 90 ? '#e74c3c' : '#4CAF50'}; border-radius: 3px;"></div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">
+                    <i class="fas fa-route"></i> 建議行程順序
+                </button>
+            </div>
         `;
         dayCard.appendChild(dayTitle);
         
@@ -1313,9 +1374,12 @@ function updateItinerary() {
                 startingPointItem.dataset.isStartingPoint = 'true';
                 startingPointItem.innerHTML = `
                     <div class="destination-info">
-                        <div class="destination-name">出發點: ${point.name}</div>
+                        <div class="destination-name">
+                            <i class="fas fa-map-marker-alt" style="color: #4CAF50;"></i> 出發點: ${point.name}
+                        </div>
                         <div class="destination-details">
-                            <div>出發時間: ${point.arrivalTime}</div>
+                            <div><i class="far fa-clock"></i> 出發時間: ${point.arrivalTime}</div>
+                            ${point.country ? `<div style="font-size: 12px; color: #666;"><i class="fas fa-globe-asia"></i> ${point.country} ${point.city || ''}</div>` : ''}
                         </div>
                     </div>
                 `;
@@ -1376,12 +1440,12 @@ function updateItinerary() {
                         // 獲取起訖點的國家和城市信息
                         if (day[pointIndex - 1].country) {
                             fromCountry = day[pointIndex - 1].country;
-                            fromCity = day[pointIndex - 1].city || '默認';
+                            fromCity = day[pointIndex - 1].city || '';
                         }
                         
                         if (point.country) {
                             toCountry = point.country;
-                            toCity = point.city || '默認';
+                            toCity = point.city || '';
                         }
                     }
                     
@@ -1396,14 +1460,29 @@ function updateItinerary() {
                     // 將標準交通方式映射到當地交通方式名稱
                     const localTransportMode = modeMapping[point.transportationFromPrevious.mode] || point.transportationFromPrevious.mode;
                     
+                    // 轉換分鐘為小時和分鐘格式
+                    const totalMinutes = Math.round(point.transportationFromPrevious.time * 60);
+                    const hours = Math.floor(totalMinutes / 60);
+                    const minutes = totalMinutes % 60;
+                    let timeDisplay = '';
+                    
+                    if (hours > 0) {
+                        timeDisplay += `${hours} 小時 `;
+                    }
+                    if (minutes > 0 || hours === 0) {
+                        timeDisplay += `${minutes} 分鐘`;
+                    }
+                    
                     transportationItem.innerHTML = `
                         <div class="transportation-icon">${transportIcon}</div>
-                        <div>
+                        <div class="transportation-info">
                             <div>交通方式: ${point.transportationFromPrevious.mode}</div>
-                            <div>預計時間: ${Math.round(point.transportationFromPrevious.time * 60)} 分鐘</div>
+                            <div>預計時間: ${timeDisplay}</div>
                         </div>
                         <div class="transportation-actions">
-                            <button onclick="openScheduleQuery('${point.transportationFromPrevious.mode}', '${fromLocation}', '${toLocation}')" title="查詢交通路線">🔍 交通查詢</button>
+                            <button onclick="openScheduleQuery('${point.transportationFromPrevious.mode}', '${fromLocation}', '${toLocation}')" title="查詢交通路線">
+                                <i class="fas fa-search"></i> 交通查詢
+                            </button>
                         </div>
                     `;
                     
@@ -1704,6 +1783,7 @@ let touchDraggedItem = null;
 let touchStartX = 0;
 let touchStartY = 0;
 let isTouchMoving = false;
+let longPressTimer = null;
 
 // 拖曳事件處理函數
 function handleDragStart(e) {
@@ -3487,23 +3567,53 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
     dialogContent.style.cssText = `
         background: white;
         padding: 20px;
-        border-radius: 5px;
+        border-radius: 8px;
         max-width: 800px;
         width: 90%;
         max-height: 80vh;
         overflow-y: auto;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     `;
     
+    // 取得當前日期的農曆資訊（若有農曆功能）
+    let lunarDateInfo = '';
+    if (typeof getLunarDate === 'function') {
+        try {
+            const today = new Date();
+            lunarDateInfo = `<span class="lunar-date">${getLunarDate(today)}</span>`;
+        } catch (e) {
+            console.log('無法獲取農曆日期');
+        }
+    }
+    
     dialogContent.innerHTML = `
-        <h3>調整第 ${dayIndex + 1} 天的景點停留時間</h3>
-        <p>您想添加的景點「${newDestination.name}」需要 ${newDestination.stayDuration.toFixed(1)} 小時停留時間和約 ${calculateDayTimeWithNewDestination(dayIndex, newDestination).transportationTime.toFixed(1)} 小時交通時間。</p>
-        <p>需要減少總計 <strong>${targetReduction.toFixed(1)} 小時</strong> 才能符合當天時間限制。</p>
-        <p>請調整以下景點的停留時間：</p>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-            <tr>
-                <th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">景點</th>
-                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">當前停留時間 (小時)</th>
-                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">新停留時間 (小時)</th>
+        <h3 style="color: #4a89dc; margin-bottom: 15px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
+            調整第 ${dayIndex + 1} 天的景點時間 ${lunarDateInfo}
+        </h3>
+        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px;">您想添加的景點「<strong style="color: #e74c3c;">${newDestination.name}</strong>」資訊：</p>
+            <ul style="margin-left: 20px; margin-bottom: 8px;">
+                <li>建議停留時間：<strong>${newDestination.stayDuration.toFixed(1)}</strong> 小時</li>
+                <li>預計交通時間：<strong>${calculateDayTimeWithNewDestination(dayIndex, newDestination).transportationTime.toFixed(1)}</strong> 小時</li>
+            </ul>
+            <p style="color: #e74c3c; font-weight: bold;">需要減少總計 ${targetReduction.toFixed(1)} 小時才能符合當天時間限制。</p>
+        </div>
+        
+        <div style="margin-bottom: 10px;">
+            <p style="font-weight: bold; margin-bottom: 5px;">調整選項：</p>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button id="distribute-equally" style="padding: 5px 10px; background-color: #4a89dc; color: white; border: none; border-radius: 4px; cursor: pointer;">平均分配減少時間</button>
+                <button id="reduce-proportionally" style="padding: 5px 10px; background-color: #4a89dc; color: white; border: none; border-radius: 4px; cursor: pointer;">按比例減少時間</button>
+                <button id="reset-adjustments" style="padding: 5px 10px; background-color: #f0ad4e; color: white; border: none; border-radius: 4px; cursor: pointer;">重設調整</button>
+            </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #ddd;">
+            <tr style="background-color: #f5f7fa;">
+                <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">景點名稱</th>
+                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">原始停留時間</th>
+                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">調整後時間</th>
+                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">減少時間</th>
             </tr>
             ${day.map((point, index) => {
                 if (point.isStartingPoint || point.isEndPoint) return '';
@@ -3513,27 +3623,53 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
                     Math.abs(d.coordinates[1] - point.coordinates[1]) < 0.0000001
                 );
                 if (destinationIndex < 0) return '';
+                
+                // 計算初始建議的減少時間
+                const suggestedNewTime = Math.max(0, point.stayDuration - targetReduction / (day.length - 1)).toFixed(1);
+                const reductionTime = (point.stayDuration - suggestedNewTime).toFixed(1);
+                
                 return `
-                    <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">${point.name}</td>
-                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">${point.stayDuration.toFixed(1)}</td>
-                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">
-                            <input type="number" min="0" max="${point.stayDuration}" step="0.1" value="${Math.max(0, point.stayDuration - targetReduction / (day.length - 1)).toFixed(1)}" 
-                                data-index="${destinationIndex}" class="time-adjustment-input" style="width: 70px;">
+                    <tr class="destination-row" data-original="${point.stayDuration.toFixed(1)}">
+                        <td style="padding: 10px; border-bottom: 1px solid #ddd;">
+                            <span>${point.name}</span>
+                            <div style="font-size: 12px; color: #666;">
+                                <span class="location-type">${getLocationType(point.name)}</span>
+                            </div>
+                        </td>
+                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">
+                            ${point.stayDuration.toFixed(1)} 小時
+                        </td>
+                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">
+                            <input type="number" min="0" max="${point.stayDuration}" step="0.1" value="${suggestedNewTime}" 
+                                data-index="${destinationIndex}" data-original="${point.stayDuration.toFixed(1)}" class="time-adjustment-input" style="width: 70px; padding: 5px; text-align: center; border: 1px solid #ddd; border-radius: 4px;">
+                            <span> 小時</span>
+                        </td>
+                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;" class="reduction-display">
+                            ${reductionTime} 小時
                         </td>
                     </tr>
                 `;
             }).join('')}
+            <tr style="background-color: #edf2f7; font-weight: bold;">
+                <td colspan="2" style="text-align: right; padding: 10px;">總計減少時間：</td>
+                <td colspan="2" style="text-align: center; padding: 10px;">
+                    <span id="total-reduction">0.0</span> / <span id="target-reduction">${targetReduction.toFixed(1)}</span> 小時
+                    <div style="width: 100%; height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-top: 5px; overflow: hidden;">
+                        <div id="reduction-progress" style="height: 100%; width: 0%; background-color: #4CAF50;"></div>
+                    </div>
+                </td>
+            </tr>
         </table>
-        <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
             <div>
-                <span>剩餘需減少時間：</span>
-                <span id="remaining-reduction">${targetReduction.toFixed(1)}</span>
+                <span style="font-weight: bold;">還需減少時間：</span>
+                <span id="remaining-reduction" style="color: #e74c3c; font-weight: bold;">${targetReduction.toFixed(1)}</span>
                 <span> 小時</span>
             </div>
             <div>
-                <button id="apply-time-adjustments" style="background-color: #4CAF50; color: white; margin-right: 10px;">應用調整</button>
-                <button id="cancel-time-adjustments">取消</button>
+                <button id="apply-time-adjustments" style="background-color: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 4px; margin-right: 10px; cursor: pointer;">確認調整</button>
+                <button id="cancel-time-adjustments" style="background-color: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">取消</button>
             </div>
         </div>
     `;
@@ -3544,78 +3680,243 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
     // 計算剩餘需減少的時間
     let remainingReduction = targetReduction;
     const timeInputs = dialogContent.querySelectorAll('.time-adjustment-input');
+    const totalReductionDisplay = document.getElementById('total-reduction');
+    const remainingReductionDisplay = document.getElementById('remaining-reduction');
+    const reductionProgress = document.getElementById('reduction-progress');
     
-    timeInputs.forEach(input => {
-        input.addEventListener('input', () => {
-            let totalReduction = 0;
-            timeInputs.forEach(inp => {
-                const destIndex = parseInt(inp.dataset.index);
-                const originalTime = destinations[destIndex].stayDuration;
-                const newTime = parseFloat(inp.value) || 0;
-                totalReduction += Math.max(0, originalTime - newTime);
-            });
+    // 更新減少時間顯示
+    function updateReductionDisplay() {
+        let totalReduction = 0;
+        
+        timeInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            const newTime = parseFloat(input.value);
+            const reduction = Math.max(0, originalTime - newTime);
             
-            const remainingElement = document.getElementById('remaining-reduction');
-            remainingReduction = targetReduction - totalReduction;
-            remainingElement.textContent = remainingReduction.toFixed(1);
-            remainingElement.style.color = remainingReduction <= 0 ? 'green' : 'red';
+            const row = input.closest('.destination-row');
+            const reductionDisplay = row.querySelector('.reduction-display');
+            reductionDisplay.textContent = reduction.toFixed(1) + ' 小時';
+            
+            // 根據調整幅度變更顏色
+            if (reduction > 0) {
+                reductionDisplay.style.color = '#e74c3c';
+            } else {
+                reductionDisplay.style.color = '#666';
+            }
+            
+            totalReduction += reduction;
         });
+        
+        remainingReduction = Math.max(0, targetReduction - totalReduction);
+        
+        totalReductionDisplay.textContent = totalReduction.toFixed(1);
+        remainingReductionDisplay.textContent = remainingReduction.toFixed(1);
+        
+        // 更新進度條
+        const progressPercentage = Math.min(100, (totalReduction / targetReduction) * 100);
+        reductionProgress.style.width = progressPercentage + '%';
+        
+        // 調整進度條顏色
+        if (progressPercentage < 100) {
+            reductionProgress.style.backgroundColor = '#f0ad4e';
+        } else {
+            reductionProgress.style.backgroundColor = '#4CAF50';
+        }
+        
+        // 啟用或禁用應用按鈕
+        const applyButton = document.getElementById('apply-time-adjustments');
+        if (totalReduction >= targetReduction) {
+            applyButton.removeAttribute('disabled');
+            applyButton.style.opacity = '1';
+        } else {
+            applyButton.setAttribute('disabled', 'true');
+            applyButton.style.opacity = '0.5';
+        }
+    }
+    
+    // 初始計算
+    setTimeout(updateReductionDisplay, 100);
+    
+    // 平均分配減少時間
+    document.getElementById('distribute-equally').addEventListener('click', () => {
+        const adjustableInputs = Array.from(timeInputs);
+        const adjustableCount = adjustableInputs.length;
+        
+        if (adjustableCount === 0) return;
+        
+        const reductionPerDestination = targetReduction / adjustableCount;
+        
+        adjustableInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            const newTime = Math.max(0, originalTime - reductionPerDestination).toFixed(1);
+            input.value = newTime;
+        });
+        
+        updateReductionDisplay();
+    });
+    
+    // 按比例減少時間
+    document.getElementById('reduce-proportionally').addEventListener('click', () => {
+        const adjustableInputs = Array.from(timeInputs);
+        
+        // 計算總原始時間
+        let totalOriginalTime = 0;
+        adjustableInputs.forEach(input => {
+            totalOriginalTime += parseFloat(input.dataset.original);
+        });
+        
+        if (totalOriginalTime === 0) return;
+        
+        // 按比例減少
+        adjustableInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            const proportion = originalTime / totalOriginalTime;
+            const reduction = targetReduction * proportion;
+            const newTime = Math.max(0, originalTime - reduction).toFixed(1);
+            input.value = newTime;
+        });
+        
+        updateReductionDisplay();
+    });
+    
+    // 重設調整
+    document.getElementById('reset-adjustments').addEventListener('click', () => {
+        timeInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            input.value = originalTime.toFixed(1);
+        });
+        
+        updateReductionDisplay();
+    });
+    
+    // 綁定輸入事件
+    timeInputs.forEach(input => {
+        input.addEventListener('input', updateReductionDisplay);
     });
     
     // 應用按鈕事件
     document.getElementById('apply-time-adjustments').addEventListener('click', () => {
-        if (remainingReduction > 0) {
-            if (!confirm('尚未完全減少所需時間。是否仍要應用這些調整並增加當天的時間限制？')) {
-                return;
-            }
-            
-            // 增加當天時間限制
-            const daySetting = getDaySettings(dayIndex);
-            const newMaxHours = daySetting.maxHours + remainingReduction;
-            
-            const existingSettingIndex = dailySettings.findIndex(s => s.dayIndex === dayIndex);
-            if (existingSettingIndex >= 0) {
-                dailySettings[existingSettingIndex].maxHours = newMaxHours;
-            } else {
-                dailySettings.push({
-                    dayIndex: dayIndex,
-                    departureTime: daySetting.departureHours + ":" + (daySetting.departureMinutes < 10 ? "0" : "") + daySetting.departureMinutes,
-                    maxHours: newMaxHours
-                });
-            }
-            
-            alert(`已將第 ${dayIndex + 1} 天的行程時間限制調整為 ${newMaxHours.toFixed(1)} 小時。`);
-        }
+        // 檢查是否已滿足減少要求
+        let totalReduction = 0;
         
-        // 應用所有調整
         timeInputs.forEach(input => {
-            const destIndex = parseInt(input.dataset.index);
-            const newTime = parseFloat(input.value) || 0;
-            if (!isNaN(destIndex) && destIndex >= 0 && destIndex < destinations.length) {
-                destinations[destIndex].stayDuration = newTime;
-            }
+            const originalTime = parseFloat(input.dataset.original);
+            const newTime = parseFloat(input.value);
+            totalReduction += Math.max(0, originalTime - newTime);
         });
         
-        // 添加新景點
-        destinations.push(newDestination);
+        if (totalReduction < targetReduction) {
+            alert(`請至少減少 ${targetReduction.toFixed(1)} 小時的停留時間。目前只減少了 ${totalReduction.toFixed(1)} 小時。`);
+            return;
+        }
         
-        // 更新界面
-        updateMap();
-        updateItinerary();
-        
-        // 保存狀態
-        saveStateToHistory();
+        // 應用調整
+        timeInputs.forEach(input => {
+            const destinationIndex = parseInt(input.dataset.index);
+            const newTime = parseFloat(input.value);
+            
+            if (!isNaN(destinationIndex) && destinationIndex >= 0 && destinationIndex < destinations.length) {
+                destinations[destinationIndex].stayDuration = newTime;
+            }
+        });
         
         // 關閉對話框
         document.body.removeChild(dialog);
         
-        alert(`已成功添加景點「${newDestination.name}」到第 ${dayIndex + 1} 天的行程中。`);
+        // 更新地圖和行程
+        updateMap();
+        updateItinerary();
+        
+        // 保存當前狀態
+        saveStateToHistory();
+        
+        // 添加新景點
+        destinations.push(newDestination);
+        updateMap();
+        updateItinerary();
+        
+        alert(`已成功調整行程時間並添加景點「${newDestination.name}」到第 ${dayIndex + 1} 天。`);
     });
     
     // 取消按鈕事件
     document.getElementById('cancel-time-adjustments').addEventListener('click', () => {
         document.body.removeChild(dialog);
     });
+}
+
+// 獲取景點類型（用於顯示更多資訊）
+function getLocationType(locationName) {
+    // 根據關鍵字判斷景點類型
+    const types = {
+        '國家公園': '自然景觀',
+        '森林': '自然景觀',
+        '山': '自然景觀',
+        '溫泉': '休閒',
+        '公園': '休閒',
+        '海灘': '海岸景觀',
+        '海': '海岸景觀',
+        '港': '海岸景觀',
+        '廟': '宗教古蹟',
+        '寺': '宗教古蹟',
+        '古蹟': '歷史古蹟',
+        '博物館': '文化展覽',
+        '美術館': '文化展覽',
+        '展覽': '文化展覽',
+        '夜市': '美食購物',
+        '老街': '美食購物',
+        '市場': '美食購物',
+        '商圈': '美食購物',
+        '百貨': '美食購物',
+        '餐廳': '美食',
+        '咖啡': '美食',
+        '遊樂園': '主題樂園',
+        '動物園': '主題樂園',
+        '車站': '交通樞紐',
+        '捷運': '交通樞紐',
+        '機場': '交通樞紐'
+    };
+    
+    // 預設類型
+    let locationType = '一般景點';
+    
+    // 針對常見台灣景點特別處理
+    const specialLocations = {
+        '日月潭': '自然景觀',
+        '阿里山': '自然景觀',
+        '太魯閣': '自然景觀',
+        '墾丁': '海岸景觀',
+        '台北101': '都市景觀',
+        '九份': '歷史老街',
+        '淡水': '海岸景觀',
+        '故宮博物院': '文化展覽',
+        '西門町': '美食購物',
+        '高雄85大樓': '都市景觀',
+        '花蓮七星潭': '海岸景觀',
+        '陽明山': '自然景觀',
+        '三峽老街': '歷史老街',
+        '鶯歌陶瓷': '文化體驗',
+        '野柳': '自然景觀',
+        '平溪': '歷史老街',
+        '十分': '歷史老街'
+    };
+    
+    // 檢查是否為特殊景點
+    for (const [key, type] of Object.entries(specialLocations)) {
+        if (locationName.includes(key)) {
+            locationType = type;
+            return locationType;
+        }
+    }
+    
+    // 如果不是特殊景點，根據關鍵字判斷
+    for (const [keyword, type] of Object.entries(types)) {
+        if (locationName.includes(keyword)) {
+            locationType = type;
+            return locationType;
+        }
+    }
+    
+    return locationType;
 }
 
 // 顯示添加景點到特定日期的對話框
@@ -3703,4 +4004,143 @@ function showAddToSpecificDayDialog(dayIndex) {
             await addDestinationToSpecificDay(destination, dayIndex);
         }
     });
+}
+
+// 農曆日期轉換功能
+// 農曆日期資料（2021-2025年）
+const LUNAR_INFO = {
+    '2023': {
+        '正月': { firstDay: new Date(2023, 0, 22), days: 29 },
+        '二月': { firstDay: new Date(2023, 1, 20), days: 30 },
+        '三月': { firstDay: new Date(2023, 2, 22), days: 29 },
+        '四月': { firstDay: new Date(2023, 3, 20), days: 30 },
+        '五月': { firstDay: new Date(2023, 4, 20), days: 29 },
+        '六月': { firstDay: new Date(2023, 5, 18), days: 30 },
+        '七月': { firstDay: new Date(2023, 6, 18), days: 29 },
+        '八月': { firstDay: new Date(2023, 7, 16), days: 30 },
+        '九月': { firstDay: new Date(2023, 8, 15), days: 29 },
+        '十月': { firstDay: new Date(2023, 9, 14), days: 30 },
+        '十一月': { firstDay: new Date(2023, 10, 13), days: 29 },
+        '十二月': { firstDay: new Date(2023, 11, 12), days: 30 }
+    },
+    '2024': {
+        '正月': { firstDay: new Date(2024, 0, 11), days: 30 },
+        '二月': { firstDay: new Date(2024, 1, 10), days: 29 },
+        '閏二月': { firstDay: new Date(2024, 2, 10), days: 30 },
+        '三月': { firstDay: new Date(2024, 3, 9), days: 29 },
+        '四月': { firstDay: new Date(2024, 4, 8), days: 30 },
+        '五月': { firstDay: new Date(2024, 5, 7), days: 29 },
+        '六月': { firstDay: new Date(2024, 6, 6), days: 30 },
+        '七月': { firstDay: new Date(2024, 7, 5), days: 29 },
+        '八月': { firstDay: new Date(2024, 8, 3), days: 30 },
+        '九月': { firstDay: new Date(2024, 9, 3), days: 29 },
+        '十月': { firstDay: new Date(2024, 10, 1), days: 30 },
+        '十一月': { firstDay: new Date(2024, 11, 1), days: 30 },
+        '十二月': { firstDay: new Date(2024, 11, 31), days: 29 }
+    },
+    '2025': {
+        '正月': { firstDay: new Date(2025, 0, 29), days: 30 },
+        '二月': { firstDay: new Date(2025, 1, 28), days: 29 },
+        '三月': { firstDay: new Date(2025, 2, 29), days: 30 },
+        '四月': { firstDay: new Date(2025, 3, 28), days: 29 },
+        '五月': { firstDay: new Date(2025, 4, 27), days: 30 },
+        '六月': { firstDay: new Date(2025, 5, 26), days: 29 },
+        '七月': { firstDay: new Date(2025, 6, 25), days: 30 },
+        '八月': { firstDay: new Date(2025, 7, 24), days: 29 },
+        '九月': { firstDay: new Date(2025, 8, 22), days: 30 },
+        '十月': { firstDay: new Date(2025, 9, 22), days: 29 },
+        '十一月': { firstDay: new Date(2025, 10, 20), days: 30 },
+        '十二月': { firstDay: new Date(2025, 11, 20), days: 30 }
+    }
+};
+
+// 農曆日期轉換函數
+function getLunarDate(date) {
+    // 如果沒有提供日期，使用當前日期
+    if (!date) {
+        date = new Date();
+    }
+    
+    // 取得年份
+    const year = date.getFullYear();
+    
+    // 檢查年份是否在支援範圍內
+    if (!LUNAR_INFO[year.toString()]) {
+        return '農曆日期不支援此年份';
+    }
+    
+    // 尋找日期所在的農曆月份
+    let lunarMonth = '';
+    let lunarDay = 0;
+    
+    const yearInfo = LUNAR_INFO[year.toString()];
+    const months = Object.keys(yearInfo);
+    
+    for (let i = 0; i < months.length; i++) {
+        const month = months[i];
+        const monthInfo = yearInfo[month];
+        const firstDay = monthInfo.firstDay;
+        const days = monthInfo.days;
+        
+        // 計算當前月的最後一天
+        const lastDay = new Date(firstDay);
+        lastDay.setDate(lastDay.getDate() + days - 1);
+        
+        // 檢查日期是否在此月範圍內
+        if (date >= firstDay && date <= lastDay) {
+            lunarMonth = month;
+            // 計算農曆日期
+            const dayDiff = Math.floor((date - firstDay) / (24 * 60 * 60 * 1000));
+            lunarDay = dayDiff + 1; // 農曆從初一開始
+            break;
+        }
+        
+        // 如果是最後一個月且日期比最後一天還晚，可能是下一年的正月
+        if (i === months.length - 1 && date > lastDay) {
+            // 嘗試獲取下一年的資料
+            const nextYear = (year + 1).toString();
+            if (LUNAR_INFO[nextYear] && LUNAR_INFO[nextYear]['正月']) {
+                const nextYearFirstMonth = LUNAR_INFO[nextYear]['正月'];
+                // 如果日期在下一年正月的第一天之前
+                if (date < nextYearFirstMonth.firstDay) {
+                    // 將其視為本年最後一個月的延續
+                    lunarMonth = month;
+                    const dayDiff = Math.floor((date - lastDay) / (24 * 60 * 60 * 1000));
+                    lunarDay = days + dayDiff;
+                }
+            }
+        }
+    }
+    
+    // 如果沒有找到對應的農曆月份，返回錯誤訊息
+    if (!lunarMonth) {
+        return '無法計算農曆日期';
+    }
+    
+    // 轉換農曆日為中文表示
+    const lunarDayNames = [
+        '初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
+        '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
+        '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十'
+    ];
+    
+    // 返回格式化的農曆日期
+    return `農曆 ${lunarMonth}${lunarDayNames[lunarDay - 1]}`;
+}
+
+// 轉換日期為帶農曆的展示格式
+function formatDateWithLunar(date) {
+    if (!(date instanceof Date)) {
+        return '日期錯誤';
+    }
+    
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    const weekDay = weekDays[date.getDay()];
+    
+    const lunarDate = getLunarDate(date);
+    
+    return `${year}年${month}月${day}日 (${weekDay}) ${lunarDate}`;
 }
