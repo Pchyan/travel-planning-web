@@ -1328,22 +1328,111 @@ function updateItinerary() {
         const departureTimeValue = daySetting ? daySetting.departureTime : departureTime;
         const maxHoursValue = daySetting ? daySetting.maxHours : maxDailyHours;
         
-        // 创建天数标题和设置
+        // 創建天數標題和設置
         const dayTitle = document.createElement('div');
         dayTitle.className = 'day-title';
+        
+        // 計算日期（如果有設定出發日期）
+        let dateDisplay = '';
+        if (departureDate) {
+            const startDate = new Date(departureDate);
+            startDate.setDate(startDate.getDate() + dayIndex);
+            
+            const year = startDate.getFullYear();
+            const month = startDate.getMonth() + 1;
+            const day = startDate.getDate();
+            const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+            const weekDay = weekDays[startDate.getDay()];
+            
+            dateDisplay = ` (${year}年${month}月${day}日 週${weekDay})`;
+        }
+        
         dayTitle.innerHTML = `
             <div class="day-header">
-                <span>第 ${dayIndex + 1} 天</span>
+                <span>第 ${dayIndex + 1} 天${dateDisplay}</span>
                 <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">在此日添加景點</button>
             </div>
             <div class="day-settings">
                 <span>出發時間: ${departureTimeValue}</span>
-                <span>行程時間: ${maxHoursValue} 小時</span>
+                <span>行程時間上限: ${maxHoursValue} 小時</span>
                 <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">設定</button>
             </div>
             <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">建議行程順序</button>
         `;
         dayCard.appendChild(dayTitle);
+        
+        // 計算當天已安排的總時間
+        let totalPlannedTime = 0;
+        let transportationTime = 0;
+        let stayTime = 0;
+        
+        // 遍歷當天所有行程點計算時間
+        day.forEach((point, pointIndex) => {
+            if (pointIndex > 0) { // 跳過起點
+                // 累計交通時間
+                if (point.transportationFromPrevious) {
+                    transportationTime += point.transportationFromPrevious.time;
+                    totalPlannedTime += point.transportationFromPrevious.time;
+                }
+                
+                // 累計停留時間
+                if (!point.isEndPoint && point.hasOwnProperty('effectiveStayDuration')) {
+                    stayTime += point.effectiveStayDuration;
+                    totalPlannedTime += point.effectiveStayDuration;
+                }
+            }
+        });
+        
+        // 計算時間使用比例
+        const timePercentage = Math.min(100, (totalPlannedTime / maxHoursValue) * 100);
+        const isExceeded = totalPlannedTime > maxHoursValue;
+        
+        // 根據時間使用比例選擇不同的顯示文字
+        let statusText = '充裕';
+        let statusClass = 'normal';
+        
+        if (timePercentage >= 95) {
+            statusText = '已滿';
+            statusClass = 'full';
+        } else if (timePercentage >= 85) {
+            statusText = '接近滿';
+            statusClass = 'almost-full';
+        } else if (timePercentage >= 70) {
+            statusText = '尚有餘裕';
+            statusClass = 'moderate';
+        } else if (timePercentage >= 50) {
+            statusText = '適中';
+            statusClass = 'comfortable';
+        }
+        
+        if (isExceeded) {
+            statusText = '超出上限';
+            statusClass = 'exceeded';
+        }
+        
+        // 創建狀態條容器
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'day-progress-container';
+        progressContainer.innerHTML = `
+            <div class="day-progress-info">
+                <span class="day-progress-label">時間安排狀態：<span class="status-text ${statusClass}">${statusText}</span></span>
+                <span>${Math.round(totalPlannedTime * 10) / 10} / ${maxHoursValue} 小時 ${isExceeded ? '(超出上限)' : ''}</span>
+            </div>
+            <div class="day-progress-bar">
+                <div class="day-progress-fill ${isExceeded ? 'exceeded' : ''}" style="width: ${timePercentage}%">
+                    <span class="day-progress-tooltip">已安排 ${Math.round(totalPlannedTime * 10) / 10} 小時（${Math.round(timePercentage)}%）</span>
+                </div>
+                <div class="day-progress-markers">
+                    ${createTimeMarkers(maxHoursValue)}
+                </div>
+            </div>
+            <div class="day-progress-detail">
+                <span>交通時間：${Math.round(transportationTime * 10) / 10} 小時</span>
+                <span>停留時間：${Math.round(stayTime * 10) / 10} 小時</span>
+                <span>${isExceeded ? '超出時間' : '剩餘時間'}：${Math.abs(Math.round((maxHoursValue - totalPlannedTime) * 10) / 10)} 小時</span>
+            </div>
+        `;
+        dayCard.appendChild(progressContainer);
         
         // 添加每个目的地
         day.forEach((point, pointIndex) => {
@@ -4623,4 +4712,29 @@ function showRecommendationsDialog() {
         // 更新附近景點推薦
         updateRecommendations('nearby');
     });
+}
+
+// 創建時間標記
+function createTimeMarkers(maxHours) {
+    let markers = '';
+    
+    // 每小時添加一個標記
+    const hourMarkers = Math.min(12, maxHours); // 最多顯示12個標記，避免過於擁擠
+    const step = maxHours / hourMarkers;
+    
+    for (let i = 1; i <= hourMarkers; i++) {
+        const hours = i * step;
+        const percentage = (hours / maxHours) * 100;
+        
+        // 只顯示整數小時的標記
+        if (Math.round(hours * 10) / 10 === Math.floor(hours)) {
+            markers += `
+                <div class="day-progress-tick" style="left: ${percentage}%">
+                    <div class="day-progress-tick-label">${Math.floor(hours)}h</div>
+                </div>
+            `;
+        }
+    }
+    
+    return markers;
 }
