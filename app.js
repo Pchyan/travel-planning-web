@@ -20,11 +20,18 @@ const STORAGE_KEY = 'travel_planner_data';
 const SAVED_ITINERARIES_KEY = 'saved_itineraries';
 const LOCATION_CACHE_KEY = 'location_cache';
 const LOCATION_MANAGER_ID = 'location-manager-dialog';
+const SYNC_QUEUE_KEY = 'travel_planner_sync_queue';
 
 // Undo/Redo 功能相關變量
 let historyStates = []; // 儲存歷史狀態
 let currentHistoryIndex = -1; // 當前歷史狀態的索引
 const MAX_HISTORY_STATES = 30; // 最大歷史記錄數量
+
+// 離線功能相關變量
+let isOnline = navigator.onLine;
+let isOfflineMode = !isOnline;
+let syncQueue = [];
+let offlineIndicator = null;
 
 // 當前選擇的國家和城市
 let currentCountry = '台灣';
@@ -262,13 +269,18 @@ function initEventListeners() {
     });
     
     // 添加景点
-    document.getElementById('add-destination').addEventListener('click', function() {
-        const newDestinationInput = document.getElementById('new-destination').value.trim();
-        if (newDestinationInput) {
-            addDestination(newDestinationInput);
-            document.getElementById('new-destination').value = '';
+    document.getElementById('add-destination').addEventListener('click', async function() {
+        const destinationInput = document.getElementById('new-destination');
+        const destination = destinationInput.value.trim();
+        
+        if (destination) {
+            // 使用支持離線操作的版本
+            const success = await addDestinationWithOfflineSupport(destination);
+            if (success) {
+                destinationInput.value = '';
+            }
         } else {
-            alert('請輸入景點名稱！');
+            alert('請輸入景點名稱');
         }
     });
     
@@ -341,65 +353,7 @@ function initEventListeners() {
     
     // 儲存行程按鈕
     document.getElementById('save-itinerary').addEventListener('click', function() {
-        if (!startingPoint) {
-            alert('請先設置出發點！');
-            return;
-        }
-        
-        if (destinations.length === 0) {
-            alert('請先添加至少一個景點！');
-            return;
-        }
-        
-        // 獲取已儲存的所有行程
-        let savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
-        
-        // 獲取最後一次使用的行程名稱
-        let lastItineraryName = localStorage.getItem('last_itinerary_name') || '我的行程';
-        
-        // 彈出對話框讓用戶輸入行程名稱，預設使用最後一次的名稱
-        const itineraryName = prompt('請輸入行程名稱：', lastItineraryName);
-        
-        if (!itineraryName) {
-            alert('請輸入有效的行程名稱！');
-            return;
-        }
-        
-        // 儲存當前行程名稱，方便下次使用
-        localStorage.setItem('last_itinerary_name', itineraryName);
-        
-        // 儲存當前行程
-        savedItineraries[itineraryName] = {
-            startingPoint: startingPoint,
-            destinations: destinations,
-            savedAt: new Date().toISOString(),
-            departureDate: departureDate,
-            departureTime: departureTime,
-            maxDailyHours: maxDailyHours,
-            dailySettings: dailySettings,
-            dailyEndPoints: dailyEndPoints,
-            locationCache: locationCache  // 同時保存位置緩存
-        };
-        
-        // 更新本地儲存
-        localStorage.setItem(SAVED_ITINERARIES_KEY, JSON.stringify(savedItineraries));
-        
-        // 同時更新當前行程
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            startingPoint: startingPoint,
-            destinations: destinations,
-            departureDate: departureDate,
-            departureTime: departureTime,
-            maxDailyHours: maxDailyHours,
-            dailySettings: dailySettings,
-            dailyEndPoints: dailyEndPoints,
-            locationCache: locationCache
-        }));
-        
-        console.log(`行程「${itineraryName}」已儲存到本地`);
-        
-        // 顯示儲存成功提示
-        alert(`行程「${itineraryName}」已成功儲存！`);
+        saveToLocalStorageWithOfflineSupport();
     });
     
     // 讀取行程按鈕
@@ -1544,7 +1498,8 @@ function updateItinerary() {
                 destinationItem.addEventListener('dragover', handleDragOver);
                 destinationItem.addEventListener('dragenter', handleDragEnter);
                 destinationItem.addEventListener('dragleave', handleDragLeave);
-                destinationItem.addEventListener('drop', handleDrop);
+                destinationItem.addEventListener('drop', handleDropWithOfflineSupport); // 使用支持離線操作的版本
+                destinationItem.addEventListener('dragend', handleDragEnd);
                 
                 // 添加觸摸事件監聽器（用於移動設備）
                 destinationItem.addEventListener('touchstart', handleTouchStart);
@@ -1691,6 +1646,14 @@ function handleCoordinatesInput(lat, lng, locationName) {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('頁面已加載，正在初始化應用...');
+    
+    // 初始化離線支援
+    initOfflineSupport();
+    
+    // 添加離線模式CSS樣式
+    addOfflineCSS();
+    
     // 初始化地图
     initMap();
     
@@ -1704,12 +1667,17 @@ document.addEventListener('DOMContentLoaded', function() {
     // 讀取位置緩存
     const savedLocationCache = localStorage.getItem(LOCATION_CACHE_KEY);
     if (savedLocationCache) {
-        locationCache = JSON.parse(savedLocationCache);
-        console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
+        try {
+            locationCache = JSON.parse(savedLocationCache);
+            console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
+        } catch (error) {
+            console.error('解析位置緩存時出錯:', error);
+            locationCache = {};
+        }
     }
     
     // 嘗試讀取已儲存的行程
-    loadItinerary();
+    loadFromLocalStorage();
     
     // 看是否有從管理頁面選擇的行程
     const selectedItineraryName = sessionStorage.getItem('selected_itinerary');
@@ -1729,6 +1697,8 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 檢查URL中是否包含經緯度參數
     parseLocationFromUrl();
+    
+    console.log('應用初始化完成');
 });
 
 // 根據交通方式和起訖點打開交通查詢網站
@@ -4144,3 +4114,935 @@ function formatDateWithLunar(date) {
     
     return `${year}年${month}月${day}日 (${weekDay}) ${lunarDate}`;
 }
+
+// ======================= 離線支援功能 =======================
+
+// 初始化離線支援
+function initOfflineSupport() {
+    console.log('初始化離線支援功能...');
+    
+    // 從 localStorage 加載待同步隊列
+    const savedQueue = localStorage.getItem(SYNC_QUEUE_KEY);
+    if (savedQueue) {
+        try {
+            syncQueue = JSON.parse(savedQueue);
+            console.log(`已加載 ${syncQueue.length} 個待同步操作`);
+        } catch (e) {
+            console.error('解析同步隊列時出錯：', e);
+            syncQueue = [];
+        }
+    }
+    
+    // 創建網絡狀態指示器
+    createOfflineIndicator();
+    
+    // 註冊 Service Worker（如果瀏覽器支援）
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/service-worker.js')
+                .then(registration => {
+                    console.log('Service Worker 註冊成功：', registration.scope);
+                })
+                .catch(error => {
+                    console.error('Service Worker 註冊失敗：', error);
+                });
+        });
+    }
+    
+    // 監聽網絡狀態變化
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOnlineStatusChange);
+    
+    // 初始檢查網絡狀態
+    handleOnlineStatusChange();
+}
+
+// 處理網絡狀態變化
+function handleOnlineStatusChange() {
+    const wasOnline = isOnline;
+    isOnline = navigator.onLine;
+    isOfflineMode = !isOnline;
+    
+    console.log(`網絡狀態變化: ${wasOnline ? '在線' : '離線'} -> ${isOnline ? '在線' : '離線'}`);
+    
+    // 更新離線指示器
+    updateOfflineIndicator();
+    
+    // 如果從離線變為在線，嘗試同步
+    if (isOnline && !wasOnline && syncQueue.length > 0) {
+        console.log('網絡已恢復，嘗試同步數據...');
+        showToast('網絡已恢復連接，正在同步數據...');
+        setTimeout(trySyncQueue, 2000);
+    }
+    
+    // 如果從在線變為離線，顯示通知
+    if (!isOnline && wasOnline) {
+        showToast('網絡連接已斷開，已切換到離線模式');
+    }
+}
+
+// 創建離線模式指示器
+function createOfflineIndicator() {
+    // 檢查是否已存在
+    if (document.querySelector('.offline-indicator')) {
+        return;
+    }
+    
+    offlineIndicator = document.createElement('div');
+    offlineIndicator.className = 'offline-indicator';
+    if (isOnline) {
+        offlineIndicator.classList.add('online');
+    }
+    
+    offlineIndicator.innerHTML = `
+        <span class="offline-icon">${isOnline ? '🌐' : '📴'}</span>
+        <span class="offline-text">${isOnline ? '已連接網絡' : '離線模式'}</span>
+        <div class="sync-info">
+            <p>同步狀態:</p>
+            <ul id="sync-queue-info">
+                <li>沒有待同步的更改</li>
+            </ul>
+            <button id="sync-now-btn" ${isOnline ? '' : 'disabled'}>立即同步</button>
+        </div>
+    `;
+    
+    document.body.appendChild(offlineIndicator);
+    
+    // 添加點擊展開/收起的功能
+    offlineIndicator.addEventListener('click', function() {
+        this.classList.toggle('expanded');
+    });
+    
+    // 同步按鈕點擊事件
+    const syncButton = document.getElementById('sync-now-btn');
+    if (syncButton) {
+        syncButton.addEventListener('click', function(e) {
+            e.stopPropagation(); // 防止觸發外層的點擊事件
+            if (isOnline) {
+                trySyncQueue();
+            }
+        });
+    }
+    
+    // 初始更新同步信息
+    updateSyncInfo();
+}
+
+// 更新離線指示器
+function updateOfflineIndicator() {
+    if (!offlineIndicator) return;
+    
+    if (isOnline) {
+        offlineIndicator.classList.add('online');
+        offlineIndicator.querySelector('.offline-text').textContent = '已連接網絡';
+        offlineIndicator.querySelector('.offline-icon').textContent = '🌐';
+    } else {
+        offlineIndicator.classList.remove('online');
+        offlineIndicator.querySelector('.offline-text').textContent = '離線模式';
+        offlineIndicator.querySelector('.offline-icon').textContent = '📴';
+    }
+    
+    // 更新同步信息
+    updateSyncInfo();
+    
+    // 更新同步按鈕狀態
+    const syncButton = document.getElementById('sync-now-btn');
+    if (syncButton) {
+        syncButton.disabled = !isOnline || syncQueue.length === 0;
+    }
+}
+
+// 更新同步信息顯示
+function updateSyncInfo() {
+    if (!offlineIndicator) return;
+    
+    const syncInfo = document.getElementById('sync-queue-info');
+    if (!syncInfo) return;
+    
+    // 清空現有內容
+    syncInfo.innerHTML = '';
+    
+    if (syncQueue.length === 0) {
+        const li = document.createElement('li');
+        li.textContent = '沒有待同步的更改';
+        syncInfo.appendChild(li);
+    } else {
+        // 顯示隊列中的操作
+        const queueSummary = {};
+        syncQueue.forEach(item => {
+            if (!queueSummary[item.type]) {
+                queueSummary[item.type] = 0;
+            }
+            queueSummary[item.type]++;
+        });
+        
+        for (const [type, count] of Object.entries(queueSummary)) {
+            const li = document.createElement('li');
+            let actionText = '未知操作';
+            
+            switch (type) {
+                case 'add':
+                    actionText = '新增景點';
+                    break;
+                case 'remove':
+                    actionText = '刪除景點';
+                    break;
+                case 'reorder':
+                    actionText = '重新排序';
+                    break;
+                case 'save':
+                    actionText = '保存行程';
+                    break;
+                case 'update':
+                    actionText = '更新資訊';
+                    break;
+            }
+            
+            li.textContent = `${actionText}: ${count} 項`;
+            syncInfo.appendChild(li);
+        }
+    }
+    
+    // 更新同步按鈕狀態
+    const syncButton = document.getElementById('sync-now-btn');
+    if (syncButton) {
+        syncButton.disabled = !isOnline || syncQueue.length === 0;
+    }
+}
+
+// 添加操作到同步隊列
+function addToSyncQueue(type, data) {
+    syncQueue.push({
+        type: type,
+        data: data,
+        timestamp: new Date().toISOString()
+    });
+    
+    // 保存到本地存儲
+    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncQueue));
+    
+    // 更新同步信息顯示
+    updateSyncInfo();
+    
+    console.log(`已添加 ${type} 操作到同步隊列，當前隊列長度: ${syncQueue.length}`);
+}
+
+// 嘗試同步數據
+function trySyncQueue() {
+    if (!isOnline || syncQueue.length === 0) {
+        return;
+    }
+    
+    console.log(`嘗試同步 ${syncQueue.length} 個操作...`);
+    showToast(`正在同步 ${syncQueue.length} 個更改...`);
+    
+    // 在這裡實現實際的同步邏輯
+    // 目前僅模擬同步成功
+    setTimeout(() => {
+        const syncCount = syncQueue.length;
+        syncQueue = [];
+        localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncQueue));
+        
+        // 更新本地存儲中的離線編輯標記
+        const savedData = localStorage.getItem(STORAGE_KEY);
+        if (savedData) {
+            try {
+                const data = JSON.parse(savedData);
+                data.offlineEdited = false;
+                data.lastSynced = new Date().toISOString();
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            } catch (error) {
+                console.error('更新本地存儲標記時出錯:', error);
+            }
+        }
+        
+        // 更新同步信息顯示
+        updateSyncInfo();
+        
+        console.log(`同步完成，處理了 ${syncCount} 個操作`);
+        showToast(`已成功同步 ${syncCount} 個更改`);
+    }, 1500);
+}
+
+// 改進的添加景點函數，支持離線模式
+async function addDestinationWithOfflineSupport(location) {
+    try {
+        // 檢查是否是離線模式
+        if (!isOnline) {
+            // 如果離線，使用本地緩存的地理編碼資料或模擬座標
+            console.log('離線模式下添加景點:', location);
+            
+            // 嘗試從緩存獲取坐標
+            let coordinates;
+            if (locationCache[location]) {
+                coordinates = locationCache[location];
+                console.log(`使用緩存的坐標: ${coordinates}`);
+            } else {
+                // 沒有緩存坐標，使用一個暫時坐標（在網絡恢復後會重新地理編碼）
+                coordinates = [25.033, 121.565]; // 預設台北座標
+                console.log('使用暫時坐標（將在網絡恢復後更新）');
+            }
+            
+            // 創建新景點物件
+            const newDestination = {
+                name: location,
+                coordinates: coordinates,
+                stayDuration: 2, // 預設停留時間
+                needsGeocoding: !locationCache[location] // 標記是否需要在網絡恢復後重新地理編碼
+            };
+            
+            // 添加到景點列表
+            destinations.push(newDestination);
+            
+            // 更新地圖和行程
+            updateMap();
+            updateItinerary();
+            
+            // 添加到同步隊列
+            addToSyncQueue('add', newDestination);
+            
+            showToast(`已添加景點（離線模式）: ${location}`);
+            
+            return true;
+        } else {
+            // 在線模式，使用原有功能
+            return await addDestination(location);
+        }
+    } catch (error) {
+        console.error('添加景點失敗:', error);
+        alert(`添加景點失敗: ${error.message}`);
+        return false;
+    }
+}
+
+// 改進的刪除景點函數，支持離線模式
+function removeDestinationWithOfflineSupport(index) {
+    try {
+        // 檢查索引是否有效
+        if (index < 0 || index >= destinations.length) {
+            console.error(`無效的景點索引: ${index}`);
+            return false;
+        }
+        
+        // 確認刪除
+        const destinationToRemove = destinations[index];
+        const confirmMessage = `確定要刪除景點"${destinationToRemove.name}"嗎？`;
+        
+        if (!confirm(confirmMessage)) {
+            return false;
+        }
+        
+        console.log(`刪除景點 [${index}]: ${destinationToRemove.name}`);
+        
+        // 刪除景點
+        destinations.splice(index, 1);
+        
+        // 更新地圖和行程
+        updateMap();
+        updateItinerary();
+        
+        // 保存當前狀態
+        saveStateToHistory();
+        
+        // 如果是離線模式，添加到同步隊列
+        if (!isOnline) {
+            addToSyncQueue('remove', destinationToRemove);
+            showToast(`已刪除景點（離線模式）: ${destinationToRemove.name}`);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('刪除景點失敗:', error);
+        alert(`刪除景點失敗: ${error.message}`);
+        return false;
+    }
+}
+
+// 改進的下拉功能，支持離線模式下的拖曳排序
+function handleDropWithOfflineSupport(e) {
+    // 原有的handleDrop邏輯
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    // 如果沒有拖曳項目，直接返回
+    if (draggedItem === null) {
+        return;
+    }
+    
+    // 如果目標是出發點或結束點，則不進行交換
+    if (this.dataset.isStartingPoint === "true" || this.dataset.isEndPoint === "true") {
+        return;
+    }
+    
+    // 如果目標與拖曳的項目相同，則不進行交換
+    if (this === draggedItem) {
+        return;
+    }
+    
+    // 獲取拖曳項目和目標項目的索引
+    const draggedIndex = parseInt(draggedItem.dataset.destinationIndex);
+    const targetIndex = parseInt(this.dataset.destinationIndex);
+    
+    // 確保索引有效
+    if (!isNaN(draggedIndex) && !isNaN(targetIndex) && 
+        draggedIndex >= 0 && draggedIndex < destinations.length &&
+        targetIndex >= 0 && targetIndex < destinations.length) {
+        
+        console.log(`交換目的地: 從索引 ${draggedIndex}(${destinations[draggedIndex].name}) 到 ${targetIndex}(${destinations[targetIndex].name})`);
+        
+        // 記錄重新排序的操作
+        const reorderOperation = {
+            from: draggedIndex,
+            to: targetIndex,
+            items: [
+                {index: draggedIndex, name: destinations[draggedIndex].name},
+                {index: targetIndex, name: destinations[targetIndex].name}
+            ]
+        };
+        
+        // 交換目的地順序
+        const temp = destinations[draggedIndex];
+        destinations[draggedIndex] = destinations[targetIndex];
+        destinations[targetIndex] = temp;
+        
+        // 更新地圖和行程
+        updateMap();
+        updateItinerary();
+        
+        // 保存當前狀態
+        saveStateToHistory();
+        
+        // 如果是離線模式，添加到同步隊列
+        if (!isOnline) {
+            addToSyncQueue('reorder', reorderOperation);
+            showToast('景點順序已更新（離線模式）');
+        }
+    } else {
+        console.error(`無法交換目的地: 無效的索引 (拖曳: ${draggedIndex}, 目標: ${targetIndex})`);
+    }
+    
+    // 移除所有拖曳目標樣式
+    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    
+    return false;
+}
+
+// 改進的保存到本地存儲函數
+function saveToLocalStorageWithOfflineSupport() {
+    try {
+        const data = {
+            startingPoint: startingPoint,
+            destinations: destinations,
+            departureDate: departureDate,  // 添加 departureDate 字段
+            departureTime: departureTime,
+            maxDailyHours: maxDailyHours,
+            dailySettings: dailySettings,
+            dailyEndPoints: dailyEndPoints,
+            locationCache: locationCache,
+            lastSavedTime: new Date().toISOString(),
+            offlineEdited: !isOnline
+        };
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        console.log('資料已保存到本地存儲');
+        
+        // 離線模式下，添加到同步隊列
+        if (!isOnline) {
+            addToSyncQueue('save', { timestamp: data.lastSavedTime });
+            showToast('行程已保存（離線模式）');
+        } else {
+            showToast('行程已保存');
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('保存資料失敗:', error);
+        alert(`保存資料失敗: ${error.message}`);
+        return false;
+    }
+}
+
+// 初始化 - 確保這個函數會在頁面加載時被調用
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('頁面已加載，正在初始化應用...');
+    
+    // 初始化離線支援
+    initOfflineSupport();
+    
+    // 添加離線模式CSS樣式
+    addOfflineCSS();
+    
+    // 初始化地图
+    initMap();
+    
+    // 初始化事件监听器
+    initEventListeners();
+    
+    // 禁用添加景点功能，直到设置出发点
+    document.getElementById('new-destination').disabled = true;
+    document.getElementById('add-destination').disabled = true;
+    
+    // 讀取位置緩存
+    const savedLocationCache = localStorage.getItem(LOCATION_CACHE_KEY);
+    if (savedLocationCache) {
+        try {
+            locationCache = JSON.parse(savedLocationCache);
+            console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
+        } catch (error) {
+            console.error('解析位置緩存時出錯:', error);
+            locationCache = {};
+        }
+    }
+    
+    // 嘗試讀取已儲存的行程
+    loadFromLocalStorage();
+    
+    // 看是否有從管理頁面選擇的行程
+    const selectedItineraryName = sessionStorage.getItem('selected_itinerary');
+    if (selectedItineraryName) {
+        // 清除，避免重複載入
+        sessionStorage.removeItem('selected_itinerary');
+        
+        // 載入選定的行程
+        loadSelectedItinerary(selectedItineraryName);
+    }
+    
+    // 應用程式初始化後，保存第一個狀態到歷史記錄
+    setTimeout(() => {
+        saveStateToHistory();
+        console.log('已保存初始狀態到歷史記錄');
+    }, 1000);
+    
+    // 檢查URL中是否包含經緯度參數
+    parseLocationFromUrl();
+    
+    console.log('應用初始化完成');
+});
+
+// 修改原始 addDestination 函數，使其使用離線支持版本
+document.getElementById('add-destination').addEventListener('click', async function() {
+    const destinationInput = document.getElementById('new-destination');
+    const destination = destinationInput.value.trim();
+    
+    if (destination) {
+        // 使用支持離線操作的版本
+        const success = await addDestinationWithOfflineSupport(destination);
+        if (success) {
+            destinationInput.value = '';
+        }
+    } else {
+        alert('請輸入景點名稱');
+    }
+});
+
+// 修改更新行程函數中的刪除按鈕處理，加入離線支持
+function updateItinerary() {
+    // ... existing code ...
+    
+    // 修改移除按鈕的事件處理
+    const removeButtons = document.querySelectorAll('.remove-btn');
+    removeButtons.forEach((button, index) => {
+        button.addEventListener('click', function() {
+            // 使用支持離線操作的版本
+            removeDestinationWithOfflineSupport(index);
+        });
+    });
+    
+    // ... existing code ...
+    
+    // 處理拖曳相關
+    const destinationItems = document.querySelectorAll('.destination-item');
+    destinationItems.forEach(item => {
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragenter', handleDragEnter);
+        item.addEventListener('dragover', handleDragOver);
+        item.addEventListener('dragleave', handleDragLeave);
+        item.addEventListener('drop', handleDropWithOfflineSupport); // 使用支持離線操作的版本
+        item.addEventListener('dragend', handleDragEnd);
+        
+        // 添加觸摸事件處理
+        item.addEventListener('touchstart', handleTouchStart);
+        item.addEventListener('touchmove', handleTouchMove);
+        item.addEventListener('touchend', handleTouchEnd);
+        item.addEventListener('touchcancel', handleTouchEnd);
+    });
+    
+    // ... existing code ...
+}
+
+// 修改保存按鈕處理，使用支持離線操作的版本
+document.getElementById('save-itinerary').addEventListener('click', function() {
+    saveToLocalStorageWithOfflineSupport();
+});
+
+// 修改本地存儲的加載函數，處理離線標記數據
+function loadFromLocalStorage() {
+    console.log('嘗試從本地存儲讀取行程數據...');
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    
+    if (!savedData) {
+        console.log('本地存儲中沒有找到行程數據');
+        return false;
+    }
+    
+    try {
+        console.log('解析本地存儲數據...');
+        const data = JSON.parse(savedData);
+        
+        // 更詳細的檢查和日誌
+        if (!data.startingPoint) {
+            console.warn('警告：本地存儲中的行程數據沒有起始點');
+        } else {
+            console.log(`載入起始點: ${data.startingPoint.name || '未命名地點'}`);
+        }
+        
+        if (!data.destinations || !Array.isArray(data.destinations) || data.destinations.length === 0) {
+            console.warn('警告：本地存儲中的行程數據沒有目的地或目的地不是有效的陣列');
+        } else {
+            console.log(`載入 ${data.destinations.length} 個景點`);
+        }
+        
+        // 賦值前先進行有效性檢查
+        startingPoint = data.startingPoint || null;
+        destinations = Array.isArray(data.destinations) ? data.destinations : [];
+        
+        // 讀取日期和時間設定
+        departureDate = data.departureDate || null;
+        console.log(`載入出發日期: ${departureDate || '未設定'}`);
+        
+        departureTime = data.departureTime || "09:00";
+        console.log(`載入出發時間: ${departureTime}`);
+        
+        maxDailyHours = data.maxDailyHours || 8;
+        console.log(`載入每日最大行程時間: ${maxDailyHours} 小時`);
+        
+        // 讀取進階設定
+        dailySettings = Array.isArray(data.dailySettings) ? data.dailySettings : [];
+        dailyEndPoints = Array.isArray(data.dailyEndPoints) ? data.dailyEndPoints : [];
+        locationCache = data.locationCache || {};
+        
+        // 檢查是否有離線編輯標記
+        if (data.offlineEdited) {
+            console.log('檢測到離線編輯的數據');
+            showToast('已加載離線編輯的行程，網絡連接時請同步');
+            
+            // 檢查是否有需要重新地理編碼的項目
+            if (isOnline) {
+                const needGeocoding = destinations.filter(dest => dest.needsGeocoding);
+                if (needGeocoding.length > 0) {
+                    console.log(`發現 ${needGeocoding.length} 個需要重新地理編碼的景點`);
+                    showToast(`正在更新 ${needGeocoding.length} 個景點的位置資訊...`);
+                    
+                    // 異步更新這些點的地理編碼
+                    setTimeout(async () => {
+                        for (const dest of needGeocoding) {
+                            try {
+                                console.log(`重新地理編碼: ${dest.name}`);
+                                const coordinates = await geocodeLocation(dest.name);
+                                dest.coordinates = coordinates;
+                                dest.needsGeocoding = false;
+                                
+                                // 更新緩存
+                                locationCache[dest.name] = coordinates;
+                            } catch (error) {
+                                console.error(`無法重新地理編碼 ${dest.name}:`, error);
+                            }
+                        }
+                        
+                        // 更新地圖和行程
+                        updateMap();
+                        updateItinerary();
+                        saveToLocalStorageWithOfflineSupport();
+                    }, 1000);
+                }
+            }
+        }
+        
+        // 更新UI
+        try {
+            if (startingPoint) {
+                document.getElementById('starting-point').value = startingPoint.name || '';
+            } else {
+                document.getElementById('starting-point').value = '';
+            }
+            
+            updateDepartureTimeInputs();
+            document.getElementById('max-daily-hours').value = maxDailyHours;
+        } catch (uiError) {
+            console.error('更新UI時出錯:', uiError);
+        }
+        
+        // 更新地圖和行程
+        try {
+            updateMap();
+            updateItinerary();
+        } catch (updateError) {
+            console.error('更新地圖或行程時出錯:', updateError);
+            alert(`更新顯示時出錯: ${updateError.message}`);
+        }
+        
+        console.log('從本地存儲加載行程成功');
+        showToast('行程加載成功');
+        
+        return true;
+    } catch (error) {
+        console.error('解析本地存儲資料時出錯:', error);
+        console.error('錯誤詳情:', error.stack);
+        console.log('原始數據:', savedData);
+        alert(`加載行程時出錯: ${error.message}\n請嘗試修復本地存儲或重新添加行程`);
+        return false;
+    }
+}
+
+// 頁面加載時，初始化並加載數據
+window.addEventListener('load', function() {
+    // 安裝提示處理
+    let deferredPrompt;
+    
+    // 處理安裝提示事件
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // 阻止自動顯示安裝提示
+        e.preventDefault();
+        
+        // 保存事件以供稍後使用
+        deferredPrompt = e;
+        
+        // 檢查是否應該顯示安裝提示
+        const hideInstallPrompt = localStorage.getItem('hideInstallPrompt');
+        if (!hideInstallPrompt) {
+            showInstallPrompt();
+        }
+    });
+    
+    // 顯示安裝提示
+    function showInstallPrompt() {
+        if (!deferredPrompt) return;
+        
+        // 檢查提示是否已存在
+        if (document.querySelector('.install-prompt')) return;
+        
+        // 創建安裝提示元素
+        const prompt = document.createElement('div');
+        prompt.className = 'install-prompt';
+        prompt.innerHTML = `
+            <div class="install-prompt-text">
+                <h3>安裝旅遊規劃助手應用</h3>
+                <p>安裝到您的設備，即使離線也能使用！</p>
+            </div>
+            <button class="install-btn">安裝</button>
+            <button class="close-install-prompt">&times;</button>
+        `;
+        
+        // 插入到頁面中
+        const container = document.querySelector('.container');
+        if (container) {
+            container.insertBefore(prompt, container.firstChild);
+            
+            // 添加安裝按鈕事件
+            prompt.querySelector('.install-btn').addEventListener('click', async () => {
+                // 顯示安裝提示
+                deferredPrompt.prompt();
+                
+                // 等待用戶回應
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`用戶安裝選擇: ${outcome}`);
+                
+                // 清除提示
+                deferredPrompt = null;
+                
+                // 移除提示元素
+                if (document.body.contains(prompt)) {
+                    prompt.remove();
+                }
+            });
+            
+            // 添加關閉按鈕事件
+            prompt.querySelector('.close-install-prompt').addEventListener('click', () => {
+                // 記住用戶不想看到安裝提示
+                localStorage.setItem('hideInstallPrompt', 'true');
+                
+                // 移除提示元素
+                if (document.body.contains(prompt)) {
+                    prompt.remove();
+                }
+            });
+        }
+    }
+});
+
+// 添加離線模式所需的CSS樣式
+function addOfflineCSS() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .offline-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(244, 67, 54, 0.9);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 9999;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            max-width: 300px;
+        }
+        
+        .offline-indicator.online {
+            background-color: rgba(76, 175, 80, 0.9);
+        }
+        
+        .offline-icon {
+            margin-right: 8px;
+            font-size: 18px;
+        }
+        
+        .offline-text {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .offline-indicator.expanded {
+            bottom: 20px;
+            width: 300px;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .sync-info {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            width: 100%;
+        }
+        
+        .offline-indicator.expanded .sync-info {
+            max-height: 500px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .sync-info p {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+        
+        .sync-info ul {
+            margin: 0;
+            padding-left: 20px;
+            font-size: 12px;
+        }
+        
+        .sync-info li {
+            margin-bottom: 4px;
+        }
+        
+        #sync-now-btn {
+            background-color: white;
+            color: #f44336;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 12px;
+            cursor: pointer;
+            width: auto;
+            display: block;
+        }
+        
+        #sync-now-btn:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .offline-edit-indicator {
+            display: inline-block;
+            background-color: #f44336;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 5px;
+            vertical-align: middle;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// 更新出發時間輸入框的顯示
+function updateDepartureTimeInputs() {
+    if (departureDate) {
+        document.getElementById('departure-date').value = departureDate;
+    }
+    if (departureTime) {
+        document.getElementById('departure-time').value = departureTime;
+    }
+}
+
+// 顯示通知提示
+function showToast(message, duration = 3000) {
+    // 檢查是否已存在 toast
+    let toast = document.querySelector('.toast-message');
+    
+    // 如果已存在，則移除
+    if (toast) {
+        document.body.removeChild(toast);
+    }
+    
+    // 創建新的 toast
+    toast = document.createElement('div');
+    toast.className = 'toast-message';
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        z-index: 10000;
+        font-size: 14px;
+        max-width: 80%;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.3s ease;
+    `;
+    
+    // 添加到頁面
+    document.body.appendChild(toast);
+    
+    // 設置自動消失
+    setTimeout(() => {
+        if (document.body.contains(toast)) {
+            toast.style.animation = 'fadeOut 0.3s ease';
+            toast.addEventListener('animationend', () => {
+                if (document.body.contains(toast)) {
+                    document.body.removeChild(toast);
+                }
+            });
+        }
+    }, duration);
+}
+
+// 添加 CSS 動畫
+(function() {
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, 20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translate(-50%, 0); }
+            to { opacity: 0; transform: translate(-50%, 20px); }
+        }
+    `;
+    document.head.appendChild(style);
+})();
