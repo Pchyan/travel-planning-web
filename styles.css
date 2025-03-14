@@ -525,3 +525,194 @@ footer {
 .add-to-day-btn:hover {
     background-color: #388E3C;
 }
+
+/* 景點推薦對話框樣式 */
+.custom-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    width: 80%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+}
+
+.dialog-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: #4a89dc;
+    color: white;
+}
+
+.dialog-title h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+}
+
+.dialog-content {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: calc(80vh - 60px);
+}
+
+.preferences-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.preferences-section h4, .recommendations-section h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.preference-controls {
+    margin-bottom: 15px;
+}
+
+.preference-controls label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.checkbox-control {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-control input {
+    margin-right: 8px;
+}
+
+.recommendations-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+}
+
+.recommendation-item {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+}
+
+.recommendation-info {
+    flex: 1;
+}
+
+.recommendation-info h5 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    color: #333;
+    font-size: 16px;
+}
+
+.recommendation-info p {
+    margin-bottom: 10px;
+    color: #666;
+    font-size: 14px;
+}
+
+.recommendation-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+    font-size: 13px;
+    color: #777;
+}
+
+.recommendation-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.add-recommended {
+    background-color: #4caf50;
+}
+
+.add-recommended:hover {
+    background-color: #388e3c;
+}
+
+#update-preferences {
+    background-color: #4a89dc;
+    margin-top: 10px;
+}
+
+@media (max-width: 768px) {
+    .custom-dialog {
+        width: 95%;
+    }
+    
+    .recommendations-list {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 添加推薦按鈕樣式 */
+.recommend-button {
+    background-color: #ff9800;
+    margin-left: 10px;
+}
+
+.recommend-button:hover {
+    background-color: #f57c00;
+}
+
+/* 景點推薦類型按鈕樣式 */
+.recommendation-type-section {
+    margin-bottom: 20px;
+}
+
+.recommendation-type-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.recommendation-type-button {
+    background-color: #f1f1f1;
+    color: #333;
+    border: 1px solid #ddd;
+    padding: 8px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 14px;
+}
+
+.recommendation-type-button:hover {
+    background-color: #e0e0e0;
+}
+
+.recommendation-type-button.active {
+    background-color: #4a89dc;
+    color: white;
+    border-color: #4a89dc;
+}

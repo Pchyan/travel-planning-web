@@ -8,6 +8,18 @@ let departureDate = null;
 let departureTime = "09:00";  // 默認出發時間為早上9點
 let maxDailyHours = 8;  // 每天的最大行程時間，預設為8小時
 
+// 用戶偏好設定與推薦系統相關變數
+let userPreferences = {
+    favoriteCategories: {},  // 景點分類偏好 {類型: 權重}
+    visitedLocations: {},    // 已訪問過的地點 {地點名: 次數}
+    preferredRegions: {},    // 偏好地區 {地區名: 權重}
+    avoidRepeats: true,      // 是否避免重複推薦
+    adventureLevel: 3        // 冒險程度 (1-5)，越高推薦越多新類型
+};
+
+// 儲存偏好設定的鍵名
+const USER_PREFERENCES_KEY = 'user_preferences';
+
 // 存儲每日特定的時間設置和結束地點
 let dailySettings = []; // 格式: [{dayIndex: 0, departureTime: "09:00", maxHours: 8}, ...]
 let dailyEndPoints = []; // 格式: [{dayIndex: 0, endPoint: {name, coordinates, stayDuration}}, ...]
@@ -252,10 +264,10 @@ function initMap() {
 // 初始化事件监听器
 function initEventListeners() {
     // 设置出发点
-    document.getElementById('set-starting-point').addEventListener('click', function() {
-        const startingPointInput = document.getElementById('starting-point').value.trim();
-        if (startingPointInput) {
-            setStartingPoint(startingPointInput);
+    document.getElementById('set-starting-point').addEventListener('click', async () => {
+        const location = document.getElementById('starting-point').value.trim();
+        if (location) {
+            await setStartingPoint(location);
         } else {
             alert('請輸入出發點！');
         }
@@ -451,6 +463,24 @@ function initEventListeners() {
             redoAction();
         }
     });
+    
+    // 新增景點推薦按鈕
+    const addDestinationContainer = document.querySelector('.add-destination');
+    
+    // 檢查是否已存在推薦按鈕，避免重複添加
+    if (!document.getElementById('recommend-attractions')) {
+        const recommendButton = document.createElement('button');
+        recommendButton.id = 'recommend-attractions';
+        recommendButton.className = 'recommend-button';
+        recommendButton.textContent = '智能推薦景點';
+        recommendButton.title = '根據您的偏好推薦適合的景點';
+        addDestinationContainer.appendChild(recommendButton);
+        
+        // 添加點擊事件
+        recommendButton.addEventListener('click', () => {
+            showRecommendationsDialog();
+        });
+    }
 }
 
 // 设置出发点
@@ -1611,16 +1641,23 @@ function handleCoordinatesInput(lat, lng, locationName) {
 }
 
 // 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // 初始化地图
     initMap();
     
-    // 初始化事件监听器
+    // 初始化事件監聽器
     initEventListeners();
     
     // 禁用添加景点功能，直到设置出发点
     document.getElementById('new-destination').disabled = true;
     document.getElementById('add-destination').disabled = true;
+    
+    // 載入用戶偏好設定
+    const savedPreferences = localStorage.getItem(USER_PREFERENCES_KEY);
+    if (savedPreferences) {
+        userPreferences = JSON.parse(savedPreferences);
+        console.log('已載入用戶偏好設定:', userPreferences);
+    }
     
     // 讀取位置緩存
     const savedLocationCache = localStorage.getItem(LOCATION_CACHE_KEY);
@@ -3702,5 +3739,787 @@ function showAddToSpecificDayDialog(dayIndex) {
             // 在指定日期添加景點
             await addDestinationToSpecificDay(destination, dayIndex);
         }
+    });
+}
+
+// 景點類別對應表 - 用於推薦系統分析
+const ATTRACTION_CATEGORIES = {
+    '自然景觀': ['公園', '山', '湖', '海灘', '瀑布', '步道', '森林', '峽谷', '洞穴', '島嶼', '沙漠', '火山', '冰川', '溫泉區', '自然保護區', '國家公園'],
+    '文化歷史': ['博物館', '美術館', '寺廟', '古蹟', '展覽館', '歷史街區', '教堂', '宮殿', '城堡'],
+    '娛樂休閒': ['夜市', '購物中心', '遊樂園', '動物園', '水族館', '植物園', '主題公園', '水上樂園', '電影院', '劇院', '音樂廳', '夜店'],
+    '美食購物': ['餐廳', '咖啡廳', '市場', '廣場'],
+    '運動戶外': ['滑雪場', '衝浪點', '潛水點', '釣魚點', '露營地', '野餐區', '觀鳥區', '高爾夫球場', '運動場', '體育館'],
+    '特色體驗': ['溫泉', '酒莊', '農場', '牧場', '果園', '纜車', '天文台', '觀景台', '燈塔', '碼頭']
+};
+
+// 反向映射表 - 從景點類型到類別
+const ATTRACTION_TYPE_TO_CATEGORY = {};
+Object.entries(ATTRACTION_CATEGORIES).forEach(([category, types]) => {
+    types.forEach(type => {
+        ATTRACTION_TYPE_TO_CATEGORY[type] = category;
+    });
+});
+
+// 分析用戶行程歷史，更新偏好設定
+function analyzeUserHistory() {
+    try {
+        console.log('分析用戶行程歷史...');
+        
+        // 載入用戶偏好設定
+        const savedPreferences = localStorage.getItem(USER_PREFERENCES_KEY);
+        if (savedPreferences) {
+            userPreferences = JSON.parse(savedPreferences);
+        }
+        
+        // 獲取已儲存的行程
+        const savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
+        
+        // 如果沒有歷史行程，則不進行分析
+        if (Object.keys(savedItineraries).length === 0) {
+            console.log('沒有找到歷史行程數據，無法分析偏好');
+            return;
+        }
+        
+        // 重置偏好計數，但保留設定值
+        userPreferences.favoriteCategories = {};
+        userPreferences.visitedLocations = {};
+        userPreferences.preferredRegions = {};
+        
+        // 遍歷所有行程
+        Object.values(savedItineraries).forEach(itinerary => {
+            // 遍歷行程中的所有景點
+            itinerary.destinations.forEach(destination => {
+                // 記錄已訪問的地點
+                if (!userPreferences.visitedLocations[destination.name]) {
+                    userPreferences.visitedLocations[destination.name] = 0;
+                }
+                userPreferences.visitedLocations[destination.name]++;
+                
+                // 分析景點類型，更新類別偏好
+                const attractionType = determineAttractionType(destination.name);
+                if (attractionType) {
+                    const category = ATTRACTION_TYPE_TO_CATEGORY[attractionType] || '其他';
+                    
+                    if (!userPreferences.favoriteCategories[category]) {
+                        userPreferences.favoriteCategories[category] = 0;
+                    }
+                    // 停留時間越長，權重越高
+                    userPreferences.favoriteCategories[category] += destination.stayDuration || 1;
+                }
+                
+                // 分析地區偏好
+                if (destination.region) {
+                    if (!userPreferences.preferredRegions[destination.region]) {
+                        userPreferences.preferredRegions[destination.region] = 0;
+                    }
+                    userPreferences.preferredRegions[destination.region]++;
+                }
+            });
+        });
+        
+        // 儲存更新後的偏好設定
+        localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(userPreferences));
+        
+        console.log('用戶偏好分析完成：', userPreferences);
+    } catch (error) {
+        console.error('分析用戶偏好時發生錯誤:', error);
+    }
+}
+
+// 嘗試確定景點類型
+function determineAttractionType(locationName) {
+    // 嘗試通過關鍵字匹配判斷類型
+    for (const [type, keywords] of Object.entries(DEFAULT_STAY_DURATION)) {
+        // 檢查地點名稱是否包含關鍵字
+        if (locationName.includes(type)) {
+            return type;
+        }
+    }
+    
+    // 無法確定類型
+    return null;
+}
+
+// 獲取推薦景點
+function getRecommendedAttractions(limit = 5) {
+    try {
+        // 首先分析用戶歷史
+        analyzeUserHistory();
+        
+        const recommendations = [];
+        
+        // 如果沒有足夠的偏好數據，返回熱門景點
+        if (Object.keys(userPreferences.favoriteCategories).length === 0) {
+            console.log('沒有足夠的偏好數據，返回熱門景點');
+            return getPopularAttractions(limit);
+        }
+        
+        // 獲取用戶最喜愛的類別（按權重排序）
+        const favoriteCategories = Object.entries(userPreferences.favoriteCategories)
+            .sort((a, b) => b[1] - a[1])
+            .map(entry => entry[0]);
+        
+        // 根據冒險程度，決定是否加入不常訪問的類別
+        if (userPreferences.adventureLevel > 3) {
+            // 找出較少訪問的類別
+            const lessVisitedCategories = Object.keys(ATTRACTION_CATEGORIES)
+                .filter(category => !favoriteCategories.includes(category) || 
+                        (userPreferences.favoriteCategories[category] || 0) < 2);
+            
+            // 按冒險程度添加不同比例的新類別
+            const newCategoriesCount = Math.min(
+                Math.floor(userPreferences.adventureLevel / 2),
+                lessVisitedCategories.length
+            );
+            
+            // 從較少訪問的類別中隨機選擇幾個
+            for (let i = 0; i < newCategoriesCount; i++) {
+                const randomIndex = Math.floor(Math.random() * lessVisitedCategories.length);
+                const category = lessVisitedCategories.splice(randomIndex, 1)[0];
+                favoriteCategories.push(category);
+            }
+        }
+        
+        // 從最喜愛的類別中獲取推薦景點
+        for (const category of favoriteCategories) {
+            // 獲取該類別的所有景點類型
+            const types = ATTRACTION_CATEGORIES[category] || [];
+            
+            for (const type of types) {
+                // 獲取該類型的熱門景點
+                const attractions = getPopularAttractionsOfType(type, 2);
+                
+                for (const attraction of attractions) {
+                    // 如果設置了避免重複且已訪問過，則跳過
+                    if (userPreferences.avoidRepeats && 
+                        userPreferences.visitedLocations[attraction.name]) {
+                        continue;
+                    }
+                    
+                    // 添加到推薦列表
+                    recommendations.push(attraction);
+                    
+                    // 達到推薦數量限制則返回
+                    if (recommendations.length >= limit) {
+                        return recommendations;
+                    }
+                }
+            }
+        }
+        
+        // 如果推薦數量不足，添加熱門景點
+        if (recommendations.length < limit) {
+            const remainingCount = limit - recommendations.length;
+            const popularAttractions = getPopularAttractions(remainingCount * 2);
+            
+            for (const attraction of popularAttractions) {
+                // 避免重複添加
+                if (!recommendations.some(rec => rec.name === attraction.name)) {
+                    recommendations.push(attraction);
+                    if (recommendations.length >= limit) {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        return recommendations;
+    } catch (error) {
+        console.error('獲取推薦景點時發生錯誤:', error);
+        return [];
+    }
+}
+
+// 獲取熱門景點（預設列表，實際應用中可能來自 API 或資料庫）
+function getPopularAttractions(limit = 5, country = null) {
+    // 這裡可以替換為真實的 API 調用
+    const popularAttractions = [
+        // 台灣熱門景點
+        {
+            name: '台北 101',
+            coordinates: [25.0338, 121.5646],
+            stayDuration: 2,
+            description: '台北地標性建築，曾為世界最高建築',
+            type: '觀景台',
+            region: '台北',
+            country: '台灣'
+        },
+        {
+            name: '九份老街',
+            coordinates: [25.1089, 121.8443],
+            stayDuration: 3,
+            description: '知名的懷舊山城，有許多美食與紀念品',
+            type: '歷史街區',
+            region: '新北',
+            country: '台灣'
+        },
+        {
+            name: '墾丁國家公園',
+            coordinates: [21.9505, 120.7893],
+            stayDuration: 5,
+            description: '台灣最南端的國家公園，擁有美麗的海灘',
+            type: '國家公園',
+            region: '屏東',
+            country: '台灣'
+        },
+        {
+            name: '太魯閣國家公園',
+            coordinates: [24.1587, 121.6219],
+            stayDuration: 4,
+            description: '以大理石峽谷聞名的國家公園',
+            type: '國家公園',
+            region: '花蓮',
+            country: '台灣'
+        },
+        {
+            name: '日月潭',
+            coordinates: [23.8496, 120.9152],
+            stayDuration: 3,
+            description: '台灣最大的淡水湖泊，風景優美',
+            type: '湖',
+            region: '南投',
+            country: '台灣'
+        },
+        {
+            name: '阿里山國家森林遊樂區',
+            coordinates: [23.5116, 120.8030],
+            stayDuration: 4,
+            description: '以雲海、日出、古木、森林鐵路和晚霞聞名',
+            type: '森林',
+            region: '嘉義',
+            country: '台灣'
+        },
+        {
+            name: '故宮博物院',
+            coordinates: [25.1023, 121.5484],
+            stayDuration: 3,
+            description: '收藏大量中國藝術品和文物的博物館',
+            type: '博物館',
+            region: '台北',
+            country: '台灣'
+        },
+        {
+            name: '高美濕地',
+            coordinates: [24.3094, 120.5830],
+            stayDuration: 2,
+            description: '知名的生態保護區，以招潮蟹聞名',
+            type: '自然保護區',
+            region: '台中',
+            country: '台灣'
+        },
+        {
+            name: '六合夜市',
+            coordinates: [22.6311, 120.3009],
+            stayDuration: 2,
+            description: '高雄著名的夜市，提供各種美食',
+            type: '夜市',
+            region: '高雄',
+            country: '台灣'
+        },
+        {
+            name: '象山',
+            coordinates: [25.0275, 121.5713],
+            stayDuration: 1.5,
+            description: '可以俯瞰台北市區和台北101的熱門爬山景點',
+            type: '山',
+            region: '台北',
+            country: '台灣'
+        },
+        {
+            name: '淡水老街',
+            coordinates: [25.1725, 121.4419],
+            stayDuration: 2,
+            description: '充滿歷史風情，可欣賞美麗夕陽的河濱老街',
+            type: '歷史街區',
+            region: '新北',
+            country: '台灣'
+        },
+        {
+            name: '花蓮七星潭',
+            coordinates: [24.0327, 121.6290],
+            stayDuration: 1.5,
+            description: '新月形狀的海灣，有美麗的礫石海灘',
+            type: '海灘',
+            region: '花蓮',
+            country: '台灣'
+        },
+        {
+            name: '陽明山國家公園',
+            coordinates: [25.1559, 121.5476],
+            stayDuration: 3,
+            description: '以火山地質景觀聞名，有溫泉和花卉',
+            type: '國家公園',
+            region: '台北',
+            country: '台灣'
+        },
+        {
+            name: '逢甲夜市',
+            coordinates: [24.1791, 120.6462],
+            stayDuration: 2,
+            description: '台中最著名的夜市，有多樣美食和商品',
+            type: '夜市',
+            region: '台中',
+            country: '台灣'
+        },
+        
+        // 日本熱門景點
+        {
+            name: '東京晴空塔',
+            coordinates: [35.7101, 139.8107],
+            stayDuration: 2,
+            description: '東京最高的建築物，提供城市全景',
+            type: '觀景台',
+            region: '東京',
+            country: '日本'
+        },
+        {
+            name: '京都清水寺',
+            coordinates: [34.9949, 135.7851],
+            stayDuration: 2.5,
+            description: '歷史悠久的佛教寺廟，UNESCO世界遺產',
+            type: '寺廟',
+            region: '京都',
+            country: '日本'
+        },
+        {
+            name: '大阪城',
+            coordinates: [34.6873, 135.5260],
+            stayDuration: 2,
+            description: '日本著名城堡，被櫻花和梅花環繞',
+            type: '城堡',
+            region: '大阪',
+            country: '日本'
+        },
+        {
+            name: '廣島和平紀念公園',
+            coordinates: [34.3955, 132.4536],
+            stayDuration: 3,
+            description: '紀念原子彈受害者的歷史景點',
+            type: '博物館',
+            region: '廣島',
+            country: '日本'
+        },
+        {
+            name: '富士山',
+            coordinates: [35.3606, 138.7274],
+            stayDuration: 6,
+            description: '日本最高山峰，國家象徵',
+            type: '山',
+            region: '靜岡/山梨',
+            country: '日本'
+        },
+        {
+            name: '淺草寺',
+            coordinates: [35.7148, 139.7967],
+            stayDuration: 1.5,
+            description: '東京最古老的寺廟，雷門為著名地標',
+            type: '寺廟',
+            region: '東京',
+            country: '日本'
+        },
+        {
+            name: '奈良公園',
+            coordinates: [34.6851, 135.8398],
+            stayDuration: 2.5,
+            description: '可與野生鹿互動的公園，有多座古寺',
+            type: '公園',
+            region: '奈良',
+            country: '日本'
+        },
+        {
+            name: '箱根溫泉',
+            coordinates: [35.2323, 139.1069],
+            stayDuration: 4,
+            description: '著名溫泉度假區，可欣賞富士山景',
+            type: '溫泉區',
+            region: '神奈川',
+            country: '日本'
+        },
+        {
+            name: '伏見稻荷大社',
+            coordinates: [34.9671, 135.7727],
+            stayDuration: 2,
+            description: '千本鳥居聞名全球的神社',
+            type: '神社',
+            region: '京都',
+            country: '日本'
+        },
+        {
+            name: '金閣寺',
+            coordinates: [35.0394, 135.7292],
+            stayDuration: 1.5,
+            description: '外觀覆蓋金箔的禪宗佛寺',
+            type: '寺廟',
+            region: '京都',
+            country: '日本'
+        },
+        {
+            name: '秋葉原',
+            coordinates: [35.6980, 139.7687],
+            stayDuration: 3,
+            description: '電子產品和動漫文化的中心地',
+            type: '購物中心',
+            region: '東京',
+            country: '日本'
+        },
+        {
+            name: '沖繩水族館',
+            coordinates: [26.6939, 127.8779],
+            stayDuration: 2.5,
+            description: '日本最大的水族館之一，有巨大的鯊魚水箱',
+            type: '水族館',
+            region: '沖繩',
+            country: '日本'
+        },
+        {
+            name: '大阪環球影城',
+            coordinates: [34.6654, 135.4323],
+            stayDuration: 6,
+            description: '日本最受歡迎的主題公園之一',
+            type: '主題公園',
+            region: '大阪',
+            country: '日本'
+        },
+        {
+            name: '道頓堀',
+            coordinates: [34.6687, 135.5021],
+            stayDuration: 2.5,
+            description: '大阪著名美食街，有螃蟹招牌和霓虹燈',
+            type: '市場',
+            region: '大阪',
+            country: '日本'
+        }
+    ];
+    
+    // 如果指定了國家，則篩選該國家的景點
+    let filteredAttractions = popularAttractions;
+    if (country) {
+        filteredAttractions = popularAttractions.filter(attraction => attraction.country === country);
+    }
+    
+    // 打亂順序後返回指定數量
+    return shuffleArray(filteredAttractions).slice(0, limit);
+}
+
+// 獲取特定類型的熱門景點，可指定國家
+function getPopularAttractionsOfType(type, limit = 2, country = null) {
+    // 篩選特定類型的景點
+    const allAttractions = getPopularAttractions(50, country); // 獲取較多的景點以供篩選
+    const attractions = allAttractions.filter(a => a.type === type);
+    return attractions.slice(0, limit);
+}
+
+// 根據座標獲取附近的景點
+function getNearbyAttractions(coordinates, radius = 50, limit = 3, country = null) {
+    // 獲取所有景點
+    const allAttractions = getPopularAttractions(50, country);
+    
+    // 計算每個景點到指定座標的距離
+    const attractionsWithDistance = allAttractions.map(attraction => {
+        const distance = calculateDistance(coordinates, attraction.coordinates);
+        return { ...attraction, distance };
+    });
+    
+    // 篩選在指定半徑內的景點
+    const nearbyAttractions = attractionsWithDistance
+        .filter(attraction => attraction.distance <= radius) // 公里為單位
+        .sort((a, b) => a.distance - b.distance); // 按距離從近到遠排序
+    
+    // 返回指定數量的附近景點
+    return nearbyAttractions.slice(0, limit);
+}
+
+// 獲取當前行程中所有位置的附近景點推薦
+function getNearbyAttractionsForItinerary(limit = 5) {
+    const recommendations = [];
+    const usedNames = new Set(); // 用於避免重複推薦
+    
+    // 從出發點開始尋找附近景點
+    if (startingPoint) {
+        const nearbyFromStart = getNearbyAttractions(startingPoint.coordinates, 30, 3);
+        nearbyFromStart.forEach(attraction => {
+            if (!usedNames.has(attraction.name) && 
+                !destinations.some(d => d.name === attraction.name)) {
+                recommendations.push(attraction);
+                usedNames.add(attraction.name);
+            }
+        });
+    }
+    
+    // 從每個已選擇的景點尋找附近景點
+    for (const destination of destinations) {
+        // 如果已經收集足夠的推薦，則停止
+        if (recommendations.length >= limit) break;
+        
+        // 尋找該景點附近的其他景點
+        const nearby = getNearbyAttractions(destination.coordinates, 20, 2);
+        nearby.forEach(attraction => {
+            // 避免重複推薦和已選擇的景點
+            if (!usedNames.has(attraction.name) && 
+                !destinations.some(d => d.name === attraction.name)) {
+                recommendations.push(attraction);
+                usedNames.add(attraction.name);
+                
+                // 如果已經收集足夠的推薦，則停止
+                if (recommendations.length >= limit) return;
+            }
+        });
+    }
+    
+    // 如果推薦數量不足，添加熱門景點補充
+    if (recommendations.length < limit) {
+        const remainingCount = limit - recommendations.length;
+        const popularAttractions = getPopularAttractions(remainingCount * 2);
+        
+        for (const attraction of popularAttractions) {
+            if (!usedNames.has(attraction.name) && 
+                !destinations.some(d => d.name === attraction.name)) {
+                recommendations.push(attraction);
+                usedNames.add(attraction.name);
+                
+                if (recommendations.length >= limit) break;
+            }
+        }
+    }
+    
+    return recommendations;
+}
+
+// 隨機打亂陣列
+function shuffleArray(array) {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+}
+
+// 顯示景點推薦對話框
+function showRecommendationsDialog() {
+    // 默認推薦類型為基於偏好
+    const defaultRecommendationType = 'preference';
+    
+    // 推薦功能類型
+    const recommendationTypes = {
+        preference: '根據偏好推薦',
+        nearby: '附近景點推薦',
+        taiwan: '台灣景點推薦',
+        japan: '日本景點推薦'
+    };
+    
+    // 取得基於偏好的推薦景點
+    let recommendations = getRecommendedAttractions(5);
+    
+    // 創建對話框
+    const dialogId = 'recommendations-dialog';
+    let dialog = document.getElementById(dialogId);
+    
+    // 如果對話框已存在，則移除
+    if (dialog) {
+        document.body.removeChild(dialog);
+    }
+    
+    // 創建新對話框
+    dialog = document.createElement('div');
+    dialog.id = dialogId;
+    dialog.className = 'custom-dialog';
+    dialog.style.zIndex = '1000';
+    
+    // 對話框標題
+    const titleBar = document.createElement('div');
+    titleBar.className = 'dialog-title';
+    titleBar.innerHTML = `
+        <h3>智能景點推薦</h3>
+        <button class="close-button">×</button>
+    `;
+    dialog.appendChild(titleBar);
+    
+    // 對話框內容
+    const content = document.createElement('div');
+    content.className = 'dialog-content';
+    
+    // 推薦類型切換部分
+    const recommendationTypeSection = document.createElement('div');
+    recommendationTypeSection.className = 'recommendation-type-section';
+    recommendationTypeSection.innerHTML = `
+        <h4>推薦方式</h4>
+        <div class="recommendation-type-buttons">
+            ${Object.entries(recommendationTypes).map(([value, label]) => `
+                <button class="recommendation-type-button ${value === defaultRecommendationType ? 'active' : ''}" 
+                        data-type="${value}">${label}</button>
+            `).join('')}
+        </div>
+    `;
+    content.appendChild(recommendationTypeSection);
+    
+    // 偏好設定部分
+    const preferencesSection = document.createElement('div');
+    preferencesSection.className = 'preferences-section';
+    preferencesSection.innerHTML = `
+        <h4>您的景點偏好設定</h4>
+        <div class="preference-controls">
+            <label for="adventure-level">冒險程度（推薦新類型景點的頻率）：</label>
+            <input type="range" id="adventure-level" min="1" max="5" value="${userPreferences.adventureLevel}">
+            <span id="adventure-level-value">${userPreferences.adventureLevel}</span>
+            
+            <div class="checkbox-control">
+                <input type="checkbox" id="avoid-repeats" ${userPreferences.avoidRepeats ? 'checked' : ''}>
+                <label for="avoid-repeats">避免推薦已訪問過的景點</label>
+            </div>
+        </div>
+        <button id="update-preferences">更新偏好設定</button>
+    `;
+    content.appendChild(preferencesSection);
+    
+    // 推薦景點列表容器
+    const recommendationsContainer = document.createElement('div');
+    recommendationsContainer.id = 'recommendations-container';
+    content.appendChild(recommendationsContainer);
+    
+    // 更新推薦景點列表
+    function updateRecommendations(type) {
+        // 根據類型獲取推薦
+        switch (type) {
+            case 'nearby':
+                if (startingPoint || destinations.length > 0) {
+                    recommendations = getNearbyAttractionsForItinerary(5);
+                } else {
+                    alert('請先設置出發點或添加至少一個景點，以便推薦附近景點');
+                    return;
+                }
+                break;
+            case 'taiwan':
+                recommendations = getPopularAttractions(8, '台灣');
+                break;
+            case 'japan':
+                recommendations = getPopularAttractions(8, '日本');
+                break;
+            case 'preference':
+            default:
+                recommendations = getRecommendedAttractions(5);
+                break;
+        }
+        
+        // 更新推薦列表UI
+        const recommendationsSection = document.createElement('div');
+        recommendationsSection.className = 'recommendations-section';
+        
+        if (recommendations.length === 0) {
+            recommendationsSection.innerHTML = `
+                <h4>推薦景點</h4>
+                <p>暫無可推薦的景點。請嘗試調整偏好設定或新增更多行程。</p>
+            `;
+        } else {
+            recommendationsSection.innerHTML = `
+                <h4>推薦景點</h4>
+                <div class="recommendations-list">
+                    ${recommendations.map((attraction, index) => `
+                        <div class="recommendation-item">
+                            <div class="recommendation-info">
+                                <h5>${attraction.name}</h5>
+                                <p>${attraction.description || '暫無描述'}</p>
+                                <div class="recommendation-details">
+                                    <span>類型: ${attraction.type || '未知'}</span>
+                                    <span>地區: ${attraction.region || '未知'}</span>
+                                    <span>國家: ${attraction.country || '未知'}</span>
+                                    ${attraction.distance ? `<span>距離: ${attraction.distance.toFixed(1)} 公里</span>` : ''}
+                                    <span>建議停留: ${attraction.stayDuration || 1} 小時</span>
+                                </div>
+                            </div>
+                            <div class="recommendation-actions">
+                                <button class="add-recommended" data-index="${index}">添加到行程</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        // 清空並更新容器內容
+        const container = document.getElementById('recommendations-container');
+        container.innerHTML = '';
+        container.appendChild(recommendationsSection);
+        
+        // 重新添加事件監聽器
+        const addButtons = container.querySelectorAll('.add-recommended');
+        addButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const index = parseInt(button.dataset.index, 10);
+                const attraction = recommendations[index];
+                
+                // 添加到行程
+                addDestination({
+                    name: attraction.name,
+                    coordinates: attraction.coordinates,
+                    stayDuration: attraction.stayDuration,
+                    type: attraction.type,
+                    region: attraction.region,
+                    country: attraction.country
+                });
+                
+                // 關閉對話框
+                document.body.removeChild(dialog);
+                
+                // 顯示成功訊息
+                alert(`已將「${attraction.name}」添加到行程`);
+            });
+        });
+    }
+    
+    dialog.appendChild(content);
+    
+    // 添加對話框到 body
+    document.body.appendChild(dialog);
+    
+    // 初始化推薦列表
+    updateRecommendations(defaultRecommendationType);
+    
+    // 關閉按鈕事件
+    dialog.querySelector('.close-button').addEventListener('click', () => {
+        document.body.removeChild(dialog);
+    });
+    
+    // 推薦類型按鈕事件
+    const typeButtons = dialog.querySelectorAll('.recommendation-type-button');
+    typeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            // 更新按鈕狀態
+            typeButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            
+            // 獲取推薦類型
+            const recommendationType = button.dataset.type;
+            
+            // 更新推薦列表
+            updateRecommendations(recommendationType);
+            
+            // 如果是偏好推薦，顯示偏好設定；否則隱藏
+            if (recommendationType === 'preference') {
+                preferencesSection.style.display = 'block';
+            } else {
+                preferencesSection.style.display = 'none';
+            }
+        });
+    });
+    
+    // 更新偏好設定按鈕事件
+    dialog.querySelector('#update-preferences').addEventListener('click', () => {
+        // 獲取新的偏好設定
+        userPreferences.adventureLevel = parseInt(dialog.querySelector('#adventure-level').value, 10);
+        userPreferences.avoidRepeats = dialog.querySelector('#avoid-repeats').checked;
+        
+        // 儲存更新後的偏好設定
+        localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(userPreferences));
+        
+        // 更新偏好推薦列表
+        updateRecommendations('preference');
+    });
+    
+    // 冒險程度滑塊事件
+    const adventureSlider = dialog.querySelector('#adventure-level');
+    const adventureValue = dialog.querySelector('#adventure-level-value');
+    adventureSlider.addEventListener('input', () => {
+        adventureValue.textContent = adventureSlider.value;
     });
 }
