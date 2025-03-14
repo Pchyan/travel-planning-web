@@ -20,18 +20,11 @@ const STORAGE_KEY = 'travel_planner_data';
 const SAVED_ITINERARIES_KEY = 'saved_itineraries';
 const LOCATION_CACHE_KEY = 'location_cache';
 const LOCATION_MANAGER_ID = 'location-manager-dialog';
-const SYNC_QUEUE_KEY = 'travel_planner_sync_queue';
 
 // Undo/Redo 功能相關變量
 let historyStates = []; // 儲存歷史狀態
 let currentHistoryIndex = -1; // 當前歷史狀態的索引
 const MAX_HISTORY_STATES = 30; // 最大歷史記錄數量
-
-// 離線功能相關變量
-let isOnline = navigator.onLine;
-let isOfflineMode = !isOnline;
-let syncQueue = [];
-let offlineIndicator = null;
 
 // 當前選擇的國家和城市
 let currentCountry = '台灣';
@@ -269,18 +262,13 @@ function initEventListeners() {
     });
     
     // 添加景点
-    document.getElementById('add-destination').addEventListener('click', async function() {
-        const destinationInput = document.getElementById('new-destination');
-        const destination = destinationInput.value.trim();
-        
-        if (destination) {
-            // 使用支持離線操作的版本
-            const success = await addDestinationWithOfflineSupport(destination);
-            if (success) {
-                destinationInput.value = '';
-            }
+    document.getElementById('add-destination').addEventListener('click', function() {
+        const newDestinationInput = document.getElementById('new-destination').value.trim();
+        if (newDestinationInput) {
+            addDestination(newDestinationInput);
+            document.getElementById('new-destination').value = '';
         } else {
-            alert('請輸入景點名稱');
+            alert('請輸入景點名稱！');
         }
     });
     
@@ -353,7 +341,65 @@ function initEventListeners() {
     
     // 儲存行程按鈕
     document.getElementById('save-itinerary').addEventListener('click', function() {
-        saveToLocalStorageWithOfflineSupport();
+        if (!startingPoint) {
+            alert('請先設置出發點！');
+            return;
+        }
+        
+        if (destinations.length === 0) {
+            alert('請先添加至少一個景點！');
+            return;
+        }
+        
+        // 獲取已儲存的所有行程
+        let savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
+        
+        // 獲取最後一次使用的行程名稱
+        let lastItineraryName = localStorage.getItem('last_itinerary_name') || '我的行程';
+        
+        // 彈出對話框讓用戶輸入行程名稱，預設使用最後一次的名稱
+        const itineraryName = prompt('請輸入行程名稱：', lastItineraryName);
+        
+        if (!itineraryName) {
+            alert('請輸入有效的行程名稱！');
+            return;
+        }
+        
+        // 儲存當前行程名稱，方便下次使用
+        localStorage.setItem('last_itinerary_name', itineraryName);
+        
+        // 儲存當前行程
+        savedItineraries[itineraryName] = {
+            startingPoint: startingPoint,
+            destinations: destinations,
+            savedAt: new Date().toISOString(),
+            departureDate: departureDate,
+            departureTime: departureTime,
+            maxDailyHours: maxDailyHours,
+            dailySettings: dailySettings,
+            dailyEndPoints: dailyEndPoints,
+            locationCache: locationCache  // 同時保存位置緩存
+        };
+        
+        // 更新本地儲存
+        localStorage.setItem(SAVED_ITINERARIES_KEY, JSON.stringify(savedItineraries));
+        
+        // 同時更新當前行程
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            startingPoint: startingPoint,
+            destinations: destinations,
+            departureDate: departureDate,
+            departureTime: departureTime,
+            maxDailyHours: maxDailyHours,
+            dailySettings: dailySettings,
+            dailyEndPoints: dailyEndPoints,
+            locationCache: locationCache
+        }));
+        
+        console.log(`行程「${itineraryName}」已儲存到本地`);
+        
+        // 顯示儲存成功提示
+        alert(`行程「${itineraryName}」已成功儲存！`);
     });
     
     // 讀取行程按鈕
@@ -1217,104 +1263,43 @@ function updateItinerary() {
     daysContainer.innerHTML = '';
     
     if (!startingPoint) {
-        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/5578/5578703.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請先設置出發點</p></div>';
+        daysContainer.innerHTML = '<p>請先設置出發點</p>';
         return;
     }
     
     if (destinations.length === 0) {
-        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/1041/1041728.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請添加景點</p></div>';
+        daysContainer.innerHTML = '<p>請添加景點</p>';
         return;
     }
     
     // 分配行程到多天
     const days = distributeItineraryToDays();
     
-    // 獲取當前日期，用於計算行程日期
-    const today = new Date();
-    const departureDate = document.getElementById('departure-date')?.value;
-    let tripStartDate;
-    
-    if (departureDate) {
-        tripStartDate = new Date(departureDate);
-    } else {
-        tripStartDate = new Date();
-    }
-    
     // 创建每天的行程卡片
     days.forEach((day, dayIndex) => {
-        // 計算當前行程日期
-        const currentDate = new Date(tripStartDate);
-        currentDate.setDate(tripStartDate.getDate() + dayIndex);
-        const formattedDate = formatDateWithLunar(currentDate);
-        
         const dayCard = document.createElement('div');
         dayCard.className = 'day-card';
         dayCard.dataset.dayIndex = dayIndex;
-        
-        // 設置卡片的基本樣式
-        if (dayIndex % 2 === 0) {
-            dayCard.style.backgroundColor = '#f9f9f9';
-        } else {
-            dayCard.style.backgroundColor = '#ffffff';
-        }
         
         // 獲取當天的設定
         const daySetting = dailySettings.find(setting => setting.dayIndex === dayIndex);
         const departureTimeValue = daySetting ? daySetting.departureTime : departureTime;
         const maxHoursValue = daySetting ? daySetting.maxHours : maxDailyHours;
         
-        // 計算當天已安排的時間
-        let scheduledHours = 0;
-        day.forEach((point, index) => {
-            if (index > 0) { // 跳過起點
-                scheduledHours += point.transportationFromPrevious.time;
-                if (!point.isEndPoint) {
-                    scheduledHours += point.stayDuration;
-                }
-            }
-        });
-        
-        // 計算剩餘時間
-        const remainingHours = Math.max(0, maxHoursValue - scheduledHours);
-        const scheduledPercentage = Math.min(100, (scheduledHours / maxHoursValue) * 100);
-        
         // 创建天数标题和设置
         const dayTitle = document.createElement('div');
         dayTitle.className = 'day-title';
         dayTitle.innerHTML = `
             <div class="day-header">
-                <div>
-                    <h3 style="margin: 0; color: #4a89dc;">第 ${dayIndex + 1} 天</h3>
-                    <div style="font-size: 14px; color: #666; margin-top: 5px;">${formattedDate}</div>
-                </div>
-                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">
-                    <i class="fas fa-plus"></i> 在此日添加景點
-                </button>
+                <span>第 ${dayIndex + 1} 天</span>
+                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">在此日添加景點</button>
             </div>
-            <div class="day-info" style="display: flex; justify-content: space-between; margin: 15px 0;">
-                <div class="day-settings">
-                    <div style="margin-bottom: 5px;">
-                        <i class="far fa-clock"></i> 出發時間: <strong>${departureTimeValue}</strong>
-                    </div>
-                    <div>
-                        <i class="fas fa-hourglass-half"></i> 行程時間: <strong>${maxHoursValue}</strong> 小時 
-                        <span style="font-size: 12px; color: #666;">(已安排: ${scheduledHours.toFixed(1)} 小時)</span>
-                    </div>
-                </div>
-                <div>
-                    <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">
-                        <i class="fas fa-cog"></i> 設定
-                    </button>
-                </div>
+            <div class="day-settings">
+                <span>出發時間: ${departureTimeValue}</span>
+                <span>行程時間: ${maxHoursValue} 小時</span>
+                <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">設定</button>
             </div>
-            <div class="time-progress" style="height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-bottom: 15px;">
-                <div style="height: 100%; width: ${scheduledPercentage}%; background-color: ${scheduledPercentage > 90 ? '#e74c3c' : '#4CAF50'}; border-radius: 3px;"></div>
-            </div>
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
-                <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">
-                    <i class="fas fa-route"></i> 建議行程順序
-                </button>
-            </div>
+            <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">建議行程順序</button>
         `;
         dayCard.appendChild(dayTitle);
         
@@ -1328,12 +1313,9 @@ function updateItinerary() {
                 startingPointItem.dataset.isStartingPoint = 'true';
                 startingPointItem.innerHTML = `
                     <div class="destination-info">
-                        <div class="destination-name">
-                            <i class="fas fa-map-marker-alt" style="color: #4CAF50;"></i> 出發點: ${point.name}
-                        </div>
+                        <div class="destination-name">出發點: ${point.name}</div>
                         <div class="destination-details">
-                            <div><i class="far fa-clock"></i> 出發時間: ${point.arrivalTime}</div>
-                            ${point.country ? `<div style="font-size: 12px; color: #666;"><i class="fas fa-globe-asia"></i> ${point.country} ${point.city || ''}</div>` : ''}
+                            <div>出發時間: ${point.arrivalTime}</div>
                         </div>
                     </div>
                 `;
@@ -1394,12 +1376,12 @@ function updateItinerary() {
                         // 獲取起訖點的國家和城市信息
                         if (day[pointIndex - 1].country) {
                             fromCountry = day[pointIndex - 1].country;
-                            fromCity = day[pointIndex - 1].city || '';
+                            fromCity = day[pointIndex - 1].city || '默認';
                         }
                         
                         if (point.country) {
                             toCountry = point.country;
-                            toCity = point.city || '';
+                            toCity = point.city || '默認';
                         }
                     }
                     
@@ -1414,29 +1396,14 @@ function updateItinerary() {
                     // 將標準交通方式映射到當地交通方式名稱
                     const localTransportMode = modeMapping[point.transportationFromPrevious.mode] || point.transportationFromPrevious.mode;
                     
-                    // 轉換分鐘為小時和分鐘格式
-                    const totalMinutes = Math.round(point.transportationFromPrevious.time * 60);
-                    const hours = Math.floor(totalMinutes / 60);
-                    const minutes = totalMinutes % 60;
-                    let timeDisplay = '';
-                    
-                    if (hours > 0) {
-                        timeDisplay += `${hours} 小時 `;
-                    }
-                    if (minutes > 0 || hours === 0) {
-                        timeDisplay += `${minutes} 分鐘`;
-                    }
-                    
                     transportationItem.innerHTML = `
                         <div class="transportation-icon">${transportIcon}</div>
-                        <div class="transportation-info">
+                        <div>
                             <div>交通方式: ${point.transportationFromPrevious.mode}</div>
-                            <div>預計時間: ${timeDisplay}</div>
+                            <div>預計時間: ${Math.round(point.transportationFromPrevious.time * 60)} 分鐘</div>
                         </div>
                         <div class="transportation-actions">
-                            <button onclick="openScheduleQuery('${point.transportationFromPrevious.mode}', '${fromLocation}', '${toLocation}')" title="查詢交通路線">
-                                <i class="fas fa-search"></i> 交通查詢
-                            </button>
+                            <button onclick="openScheduleQuery('${point.transportationFromPrevious.mode}', '${fromLocation}', '${toLocation}')" title="查詢交通路線">🔍 交通查詢</button>
                         </div>
                     `;
                     
@@ -1498,8 +1465,7 @@ function updateItinerary() {
                 destinationItem.addEventListener('dragover', handleDragOver);
                 destinationItem.addEventListener('dragenter', handleDragEnter);
                 destinationItem.addEventListener('dragleave', handleDragLeave);
-                destinationItem.addEventListener('drop', handleDropWithOfflineSupport); // 使用支持離線操作的版本
-                destinationItem.addEventListener('dragend', handleDragEnd);
+                destinationItem.addEventListener('drop', handleDrop);
                 
                 // 添加觸摸事件監聽器（用於移動設備）
                 destinationItem.addEventListener('touchstart', handleTouchStart);
@@ -1646,14 +1612,6 @@ function handleCoordinatesInput(lat, lng, locationName) {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('頁面已加載，正在初始化應用...');
-    
-    // 初始化離線支援
-    initOfflineSupport();
-    
-    // 添加離線模式CSS樣式
-    addOfflineCSS();
-    
     // 初始化地图
     initMap();
     
@@ -1667,17 +1625,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // 讀取位置緩存
     const savedLocationCache = localStorage.getItem(LOCATION_CACHE_KEY);
     if (savedLocationCache) {
-        try {
-            locationCache = JSON.parse(savedLocationCache);
-            console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
-        } catch (error) {
-            console.error('解析位置緩存時出錯:', error);
-            locationCache = {};
-        }
+        locationCache = JSON.parse(savedLocationCache);
+        console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
     }
     
     // 嘗試讀取已儲存的行程
-    loadFromLocalStorage();
+    loadItinerary();
     
     // 看是否有從管理頁面選擇的行程
     const selectedItineraryName = sessionStorage.getItem('selected_itinerary');
@@ -1697,8 +1650,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 檢查URL中是否包含經緯度參數
     parseLocationFromUrl();
-    
-    console.log('應用初始化完成');
 });
 
 // 根據交通方式和起訖點打開交通查詢網站
@@ -1753,7 +1704,6 @@ let touchDraggedItem = null;
 let touchStartX = 0;
 let touchStartY = 0;
 let isTouchMoving = false;
-let longPressTimer = null;
 
 // 拖曳事件處理函數
 function handleDragStart(e) {
@@ -3537,53 +3487,23 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
     dialogContent.style.cssText = `
         background: white;
         padding: 20px;
-        border-radius: 8px;
+        border-radius: 5px;
         max-width: 800px;
         width: 90%;
         max-height: 80vh;
         overflow-y: auto;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     `;
     
-    // 取得當前日期的農曆資訊（若有農曆功能）
-    let lunarDateInfo = '';
-    if (typeof getLunarDate === 'function') {
-        try {
-            const today = new Date();
-            lunarDateInfo = `<span class="lunar-date">${getLunarDate(today)}</span>`;
-        } catch (e) {
-            console.log('無法獲取農曆日期');
-        }
-    }
-    
     dialogContent.innerHTML = `
-        <h3 style="color: #4a89dc; margin-bottom: 15px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
-            調整第 ${dayIndex + 1} 天的景點時間 ${lunarDateInfo}
-        </h3>
-        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-            <p style="margin-bottom: 8px;">您想添加的景點「<strong style="color: #e74c3c;">${newDestination.name}</strong>」資訊：</p>
-            <ul style="margin-left: 20px; margin-bottom: 8px;">
-                <li>建議停留時間：<strong>${newDestination.stayDuration.toFixed(1)}</strong> 小時</li>
-                <li>預計交通時間：<strong>${calculateDayTimeWithNewDestination(dayIndex, newDestination).transportationTime.toFixed(1)}</strong> 小時</li>
-            </ul>
-            <p style="color: #e74c3c; font-weight: bold;">需要減少總計 ${targetReduction.toFixed(1)} 小時才能符合當天時間限制。</p>
-        </div>
-        
-        <div style="margin-bottom: 10px;">
-            <p style="font-weight: bold; margin-bottom: 5px;">調整選項：</p>
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <button id="distribute-equally" style="padding: 5px 10px; background-color: #4a89dc; color: white; border: none; border-radius: 4px; cursor: pointer;">平均分配減少時間</button>
-                <button id="reduce-proportionally" style="padding: 5px 10px; background-color: #4a89dc; color: white; border: none; border-radius: 4px; cursor: pointer;">按比例減少時間</button>
-                <button id="reset-adjustments" style="padding: 5px 10px; background-color: #f0ad4e; color: white; border: none; border-radius: 4px; cursor: pointer;">重設調整</button>
-            </div>
-        </div>
-        
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #ddd;">
-            <tr style="background-color: #f5f7fa;">
-                <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">景點名稱</th>
-                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">原始停留時間</th>
-                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">調整後時間</th>
-                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">減少時間</th>
+        <h3>調整第 ${dayIndex + 1} 天的景點停留時間</h3>
+        <p>您想添加的景點「${newDestination.name}」需要 ${newDestination.stayDuration.toFixed(1)} 小時停留時間和約 ${calculateDayTimeWithNewDestination(dayIndex, newDestination).transportationTime.toFixed(1)} 小時交通時間。</p>
+        <p>需要減少總計 <strong>${targetReduction.toFixed(1)} 小時</strong> 才能符合當天時間限制。</p>
+        <p>請調整以下景點的停留時間：</p>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr>
+                <th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">景點</th>
+                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">當前停留時間 (小時)</th>
+                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">新停留時間 (小時)</th>
             </tr>
             ${day.map((point, index) => {
                 if (point.isStartingPoint || point.isEndPoint) return '';
@@ -3593,53 +3513,27 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
                     Math.abs(d.coordinates[1] - point.coordinates[1]) < 0.0000001
                 );
                 if (destinationIndex < 0) return '';
-                
-                // 計算初始建議的減少時間
-                const suggestedNewTime = Math.max(0, point.stayDuration - targetReduction / (day.length - 1)).toFixed(1);
-                const reductionTime = (point.stayDuration - suggestedNewTime).toFixed(1);
-                
                 return `
-                    <tr class="destination-row" data-original="${point.stayDuration.toFixed(1)}">
-                        <td style="padding: 10px; border-bottom: 1px solid #ddd;">
-                            <span>${point.name}</span>
-                            <div style="font-size: 12px; color: #666;">
-                                <span class="location-type">${getLocationType(point.name)}</span>
-                            </div>
-                        </td>
-                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">
-                            ${point.stayDuration.toFixed(1)} 小時
-                        </td>
-                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">
-                            <input type="number" min="0" max="${point.stayDuration}" step="0.1" value="${suggestedNewTime}" 
-                                data-index="${destinationIndex}" data-original="${point.stayDuration.toFixed(1)}" class="time-adjustment-input" style="width: 70px; padding: 5px; text-align: center; border: 1px solid #ddd; border-radius: 4px;">
-                            <span> 小時</span>
-                        </td>
-                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;" class="reduction-display">
-                            ${reductionTime} 小時
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">${point.name}</td>
+                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">${point.stayDuration.toFixed(1)}</td>
+                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">
+                            <input type="number" min="0" max="${point.stayDuration}" step="0.1" value="${Math.max(0, point.stayDuration - targetReduction / (day.length - 1)).toFixed(1)}" 
+                                data-index="${destinationIndex}" class="time-adjustment-input" style="width: 70px;">
                         </td>
                     </tr>
                 `;
             }).join('')}
-            <tr style="background-color: #edf2f7; font-weight: bold;">
-                <td colspan="2" style="text-align: right; padding: 10px;">總計減少時間：</td>
-                <td colspan="2" style="text-align: center; padding: 10px;">
-                    <span id="total-reduction">0.0</span> / <span id="target-reduction">${targetReduction.toFixed(1)}</span> 小時
-                    <div style="width: 100%; height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-top: 5px; overflow: hidden;">
-                        <div id="reduction-progress" style="height: 100%; width: 0%; background-color: #4CAF50;"></div>
-                    </div>
-                </td>
-            </tr>
         </table>
-        
-        <div style="display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+        <div style="display: flex; justify-content: space-between; margin-top: 10px;">
             <div>
-                <span style="font-weight: bold;">還需減少時間：</span>
-                <span id="remaining-reduction" style="color: #e74c3c; font-weight: bold;">${targetReduction.toFixed(1)}</span>
+                <span>剩餘需減少時間：</span>
+                <span id="remaining-reduction">${targetReduction.toFixed(1)}</span>
                 <span> 小時</span>
             </div>
             <div>
-                <button id="apply-time-adjustments" style="background-color: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 4px; margin-right: 10px; cursor: pointer;">確認調整</button>
-                <button id="cancel-time-adjustments" style="background-color: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">取消</button>
+                <button id="apply-time-adjustments" style="background-color: #4CAF50; color: white; margin-right: 10px;">應用調整</button>
+                <button id="cancel-time-adjustments">取消</button>
             </div>
         </div>
     `;
@@ -3650,243 +3544,78 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
     // 計算剩餘需減少的時間
     let remainingReduction = targetReduction;
     const timeInputs = dialogContent.querySelectorAll('.time-adjustment-input');
-    const totalReductionDisplay = document.getElementById('total-reduction');
-    const remainingReductionDisplay = document.getElementById('remaining-reduction');
-    const reductionProgress = document.getElementById('reduction-progress');
     
-    // 更新減少時間顯示
-    function updateReductionDisplay() {
-        let totalReduction = 0;
-        
-        timeInputs.forEach(input => {
-            const originalTime = parseFloat(input.dataset.original);
-            const newTime = parseFloat(input.value);
-            const reduction = Math.max(0, originalTime - newTime);
-            
-            const row = input.closest('.destination-row');
-            const reductionDisplay = row.querySelector('.reduction-display');
-            reductionDisplay.textContent = reduction.toFixed(1) + ' 小時';
-            
-            // 根據調整幅度變更顏色
-            if (reduction > 0) {
-                reductionDisplay.style.color = '#e74c3c';
-            } else {
-                reductionDisplay.style.color = '#666';
-            }
-            
-            totalReduction += reduction;
-        });
-        
-        remainingReduction = Math.max(0, targetReduction - totalReduction);
-        
-        totalReductionDisplay.textContent = totalReduction.toFixed(1);
-        remainingReductionDisplay.textContent = remainingReduction.toFixed(1);
-        
-        // 更新進度條
-        const progressPercentage = Math.min(100, (totalReduction / targetReduction) * 100);
-        reductionProgress.style.width = progressPercentage + '%';
-        
-        // 調整進度條顏色
-        if (progressPercentage < 100) {
-            reductionProgress.style.backgroundColor = '#f0ad4e';
-        } else {
-            reductionProgress.style.backgroundColor = '#4CAF50';
-        }
-        
-        // 啟用或禁用應用按鈕
-        const applyButton = document.getElementById('apply-time-adjustments');
-        if (totalReduction >= targetReduction) {
-            applyButton.removeAttribute('disabled');
-            applyButton.style.opacity = '1';
-        } else {
-            applyButton.setAttribute('disabled', 'true');
-            applyButton.style.opacity = '0.5';
-        }
-    }
-    
-    // 初始計算
-    setTimeout(updateReductionDisplay, 100);
-    
-    // 平均分配減少時間
-    document.getElementById('distribute-equally').addEventListener('click', () => {
-        const adjustableInputs = Array.from(timeInputs);
-        const adjustableCount = adjustableInputs.length;
-        
-        if (adjustableCount === 0) return;
-        
-        const reductionPerDestination = targetReduction / adjustableCount;
-        
-        adjustableInputs.forEach(input => {
-            const originalTime = parseFloat(input.dataset.original);
-            const newTime = Math.max(0, originalTime - reductionPerDestination).toFixed(1);
-            input.value = newTime;
-        });
-        
-        updateReductionDisplay();
-    });
-    
-    // 按比例減少時間
-    document.getElementById('reduce-proportionally').addEventListener('click', () => {
-        const adjustableInputs = Array.from(timeInputs);
-        
-        // 計算總原始時間
-        let totalOriginalTime = 0;
-        adjustableInputs.forEach(input => {
-            totalOriginalTime += parseFloat(input.dataset.original);
-        });
-        
-        if (totalOriginalTime === 0) return;
-        
-        // 按比例減少
-        adjustableInputs.forEach(input => {
-            const originalTime = parseFloat(input.dataset.original);
-            const proportion = originalTime / totalOriginalTime;
-            const reduction = targetReduction * proportion;
-            const newTime = Math.max(0, originalTime - reduction).toFixed(1);
-            input.value = newTime;
-        });
-        
-        updateReductionDisplay();
-    });
-    
-    // 重設調整
-    document.getElementById('reset-adjustments').addEventListener('click', () => {
-        timeInputs.forEach(input => {
-            const originalTime = parseFloat(input.dataset.original);
-            input.value = originalTime.toFixed(1);
-        });
-        
-        updateReductionDisplay();
-    });
-    
-    // 綁定輸入事件
     timeInputs.forEach(input => {
-        input.addEventListener('input', updateReductionDisplay);
+        input.addEventListener('input', () => {
+            let totalReduction = 0;
+            timeInputs.forEach(inp => {
+                const destIndex = parseInt(inp.dataset.index);
+                const originalTime = destinations[destIndex].stayDuration;
+                const newTime = parseFloat(inp.value) || 0;
+                totalReduction += Math.max(0, originalTime - newTime);
+            });
+            
+            const remainingElement = document.getElementById('remaining-reduction');
+            remainingReduction = targetReduction - totalReduction;
+            remainingElement.textContent = remainingReduction.toFixed(1);
+            remainingElement.style.color = remainingReduction <= 0 ? 'green' : 'red';
+        });
     });
     
     // 應用按鈕事件
     document.getElementById('apply-time-adjustments').addEventListener('click', () => {
-        // 檢查是否已滿足減少要求
-        let totalReduction = 0;
-        
-        timeInputs.forEach(input => {
-            const originalTime = parseFloat(input.dataset.original);
-            const newTime = parseFloat(input.value);
-            totalReduction += Math.max(0, originalTime - newTime);
-        });
-        
-        if (totalReduction < targetReduction) {
-            alert(`請至少減少 ${targetReduction.toFixed(1)} 小時的停留時間。目前只減少了 ${totalReduction.toFixed(1)} 小時。`);
-            return;
+        if (remainingReduction > 0) {
+            if (!confirm('尚未完全減少所需時間。是否仍要應用這些調整並增加當天的時間限制？')) {
+                return;
+            }
+            
+            // 增加當天時間限制
+            const daySetting = getDaySettings(dayIndex);
+            const newMaxHours = daySetting.maxHours + remainingReduction;
+            
+            const existingSettingIndex = dailySettings.findIndex(s => s.dayIndex === dayIndex);
+            if (existingSettingIndex >= 0) {
+                dailySettings[existingSettingIndex].maxHours = newMaxHours;
+            } else {
+                dailySettings.push({
+                    dayIndex: dayIndex,
+                    departureTime: daySetting.departureHours + ":" + (daySetting.departureMinutes < 10 ? "0" : "") + daySetting.departureMinutes,
+                    maxHours: newMaxHours
+                });
+            }
+            
+            alert(`已將第 ${dayIndex + 1} 天的行程時間限制調整為 ${newMaxHours.toFixed(1)} 小時。`);
         }
         
-        // 應用調整
+        // 應用所有調整
         timeInputs.forEach(input => {
-            const destinationIndex = parseInt(input.dataset.index);
-            const newTime = parseFloat(input.value);
-            
-            if (!isNaN(destinationIndex) && destinationIndex >= 0 && destinationIndex < destinations.length) {
-                destinations[destinationIndex].stayDuration = newTime;
+            const destIndex = parseInt(input.dataset.index);
+            const newTime = parseFloat(input.value) || 0;
+            if (!isNaN(destIndex) && destIndex >= 0 && destIndex < destinations.length) {
+                destinations[destIndex].stayDuration = newTime;
             }
         });
+        
+        // 添加新景點
+        destinations.push(newDestination);
+        
+        // 更新界面
+        updateMap();
+        updateItinerary();
+        
+        // 保存狀態
+        saveStateToHistory();
         
         // 關閉對話框
         document.body.removeChild(dialog);
         
-        // 更新地圖和行程
-        updateMap();
-        updateItinerary();
-        
-        // 保存當前狀態
-        saveStateToHistory();
-        
-        // 添加新景點
-        destinations.push(newDestination);
-        updateMap();
-        updateItinerary();
-        
-        alert(`已成功調整行程時間並添加景點「${newDestination.name}」到第 ${dayIndex + 1} 天。`);
+        alert(`已成功添加景點「${newDestination.name}」到第 ${dayIndex + 1} 天的行程中。`);
     });
     
     // 取消按鈕事件
     document.getElementById('cancel-time-adjustments').addEventListener('click', () => {
         document.body.removeChild(dialog);
     });
-}
-
-// 獲取景點類型（用於顯示更多資訊）
-function getLocationType(locationName) {
-    // 根據關鍵字判斷景點類型
-    const types = {
-        '國家公園': '自然景觀',
-        '森林': '自然景觀',
-        '山': '自然景觀',
-        '溫泉': '休閒',
-        '公園': '休閒',
-        '海灘': '海岸景觀',
-        '海': '海岸景觀',
-        '港': '海岸景觀',
-        '廟': '宗教古蹟',
-        '寺': '宗教古蹟',
-        '古蹟': '歷史古蹟',
-        '博物館': '文化展覽',
-        '美術館': '文化展覽',
-        '展覽': '文化展覽',
-        '夜市': '美食購物',
-        '老街': '美食購物',
-        '市場': '美食購物',
-        '商圈': '美食購物',
-        '百貨': '美食購物',
-        '餐廳': '美食',
-        '咖啡': '美食',
-        '遊樂園': '主題樂園',
-        '動物園': '主題樂園',
-        '車站': '交通樞紐',
-        '捷運': '交通樞紐',
-        '機場': '交通樞紐'
-    };
-    
-    // 預設類型
-    let locationType = '一般景點';
-    
-    // 針對常見台灣景點特別處理
-    const specialLocations = {
-        '日月潭': '自然景觀',
-        '阿里山': '自然景觀',
-        '太魯閣': '自然景觀',
-        '墾丁': '海岸景觀',
-        '台北101': '都市景觀',
-        '九份': '歷史老街',
-        '淡水': '海岸景觀',
-        '故宮博物院': '文化展覽',
-        '西門町': '美食購物',
-        '高雄85大樓': '都市景觀',
-        '花蓮七星潭': '海岸景觀',
-        '陽明山': '自然景觀',
-        '三峽老街': '歷史老街',
-        '鶯歌陶瓷': '文化體驗',
-        '野柳': '自然景觀',
-        '平溪': '歷史老街',
-        '十分': '歷史老街'
-    };
-    
-    // 檢查是否為特殊景點
-    for (const [key, type] of Object.entries(specialLocations)) {
-        if (locationName.includes(key)) {
-            locationType = type;
-            return locationType;
-        }
-    }
-    
-    // 如果不是特殊景點，根據關鍵字判斷
-    for (const [keyword, type] of Object.entries(types)) {
-        if (locationName.includes(keyword)) {
-            locationType = type;
-            return locationType;
-        }
-    }
-    
-    return locationType;
 }
 
 // 顯示添加景點到特定日期的對話框
@@ -3975,1074 +3704,3 @@ function showAddToSpecificDayDialog(dayIndex) {
         }
     });
 }
-
-// 農曆日期轉換功能
-// 農曆日期資料（2021-2025年）
-const LUNAR_INFO = {
-    '2023': {
-        '正月': { firstDay: new Date(2023, 0, 22), days: 29 },
-        '二月': { firstDay: new Date(2023, 1, 20), days: 30 },
-        '三月': { firstDay: new Date(2023, 2, 22), days: 29 },
-        '四月': { firstDay: new Date(2023, 3, 20), days: 30 },
-        '五月': { firstDay: new Date(2023, 4, 20), days: 29 },
-        '六月': { firstDay: new Date(2023, 5, 18), days: 30 },
-        '七月': { firstDay: new Date(2023, 6, 18), days: 29 },
-        '八月': { firstDay: new Date(2023, 7, 16), days: 30 },
-        '九月': { firstDay: new Date(2023, 8, 15), days: 29 },
-        '十月': { firstDay: new Date(2023, 9, 14), days: 30 },
-        '十一月': { firstDay: new Date(2023, 10, 13), days: 29 },
-        '十二月': { firstDay: new Date(2023, 11, 12), days: 30 }
-    },
-    '2024': {
-        '正月': { firstDay: new Date(2024, 0, 11), days: 30 },
-        '二月': { firstDay: new Date(2024, 1, 10), days: 29 },
-        '閏二月': { firstDay: new Date(2024, 2, 10), days: 30 },
-        '三月': { firstDay: new Date(2024, 3, 9), days: 29 },
-        '四月': { firstDay: new Date(2024, 4, 8), days: 30 },
-        '五月': { firstDay: new Date(2024, 5, 7), days: 29 },
-        '六月': { firstDay: new Date(2024, 6, 6), days: 30 },
-        '七月': { firstDay: new Date(2024, 7, 5), days: 29 },
-        '八月': { firstDay: new Date(2024, 8, 3), days: 30 },
-        '九月': { firstDay: new Date(2024, 9, 3), days: 29 },
-        '十月': { firstDay: new Date(2024, 10, 1), days: 30 },
-        '十一月': { firstDay: new Date(2024, 11, 1), days: 30 },
-        '十二月': { firstDay: new Date(2024, 11, 31), days: 29 }
-    },
-    '2025': {
-        '正月': { firstDay: new Date(2025, 0, 29), days: 30 },
-        '二月': { firstDay: new Date(2025, 1, 28), days: 29 },
-        '三月': { firstDay: new Date(2025, 2, 29), days: 30 },
-        '四月': { firstDay: new Date(2025, 3, 28), days: 29 },
-        '五月': { firstDay: new Date(2025, 4, 27), days: 30 },
-        '六月': { firstDay: new Date(2025, 5, 26), days: 29 },
-        '七月': { firstDay: new Date(2025, 6, 25), days: 30 },
-        '八月': { firstDay: new Date(2025, 7, 24), days: 29 },
-        '九月': { firstDay: new Date(2025, 8, 22), days: 30 },
-        '十月': { firstDay: new Date(2025, 9, 22), days: 29 },
-        '十一月': { firstDay: new Date(2025, 10, 20), days: 30 },
-        '十二月': { firstDay: new Date(2025, 11, 20), days: 30 }
-    }
-};
-
-// 農曆日期轉換函數
-function getLunarDate(date) {
-    // 如果沒有提供日期，使用當前日期
-    if (!date) {
-        date = new Date();
-    }
-    
-    // 取得年份
-    const year = date.getFullYear();
-    
-    // 檢查年份是否在支援範圍內
-    if (!LUNAR_INFO[year.toString()]) {
-        return '農曆日期不支援此年份';
-    }
-    
-    // 尋找日期所在的農曆月份
-    let lunarMonth = '';
-    let lunarDay = 0;
-    
-    const yearInfo = LUNAR_INFO[year.toString()];
-    const months = Object.keys(yearInfo);
-    
-    for (let i = 0; i < months.length; i++) {
-        const month = months[i];
-        const monthInfo = yearInfo[month];
-        const firstDay = monthInfo.firstDay;
-        const days = monthInfo.days;
-        
-        // 計算當前月的最後一天
-        const lastDay = new Date(firstDay);
-        lastDay.setDate(lastDay.getDate() + days - 1);
-        
-        // 檢查日期是否在此月範圍內
-        if (date >= firstDay && date <= lastDay) {
-            lunarMonth = month;
-            // 計算農曆日期
-            const dayDiff = Math.floor((date - firstDay) / (24 * 60 * 60 * 1000));
-            lunarDay = dayDiff + 1; // 農曆從初一開始
-            break;
-        }
-        
-        // 如果是最後一個月且日期比最後一天還晚，可能是下一年的正月
-        if (i === months.length - 1 && date > lastDay) {
-            // 嘗試獲取下一年的資料
-            const nextYear = (year + 1).toString();
-            if (LUNAR_INFO[nextYear] && LUNAR_INFO[nextYear]['正月']) {
-                const nextYearFirstMonth = LUNAR_INFO[nextYear]['正月'];
-                // 如果日期在下一年正月的第一天之前
-                if (date < nextYearFirstMonth.firstDay) {
-                    // 將其視為本年最後一個月的延續
-                    lunarMonth = month;
-                    const dayDiff = Math.floor((date - lastDay) / (24 * 60 * 60 * 1000));
-                    lunarDay = days + dayDiff;
-                }
-            }
-        }
-    }
-    
-    // 如果沒有找到對應的農曆月份，返回錯誤訊息
-    if (!lunarMonth) {
-        return '無法計算農曆日期';
-    }
-    
-    // 轉換農曆日為中文表示
-    const lunarDayNames = [
-        '初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
-        '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
-        '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十'
-    ];
-    
-    // 返回格式化的農曆日期
-    return `農曆 ${lunarMonth}${lunarDayNames[lunarDay - 1]}`;
-}
-
-// 轉換日期為帶農曆的展示格式
-function formatDateWithLunar(date) {
-    if (!(date instanceof Date)) {
-        return '日期錯誤';
-    }
-    
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-    const weekDay = weekDays[date.getDay()];
-    
-    const lunarDate = getLunarDate(date);
-    
-    return `${year}年${month}月${day}日 (${weekDay}) ${lunarDate}`;
-}
-
-// ======================= 離線支援功能 =======================
-
-// 初始化離線支援
-function initOfflineSupport() {
-    console.log('初始化離線支援功能...');
-    
-    // 從 localStorage 加載待同步隊列
-    const savedQueue = localStorage.getItem(SYNC_QUEUE_KEY);
-    if (savedQueue) {
-        try {
-            syncQueue = JSON.parse(savedQueue);
-            console.log(`已加載 ${syncQueue.length} 個待同步操作`);
-        } catch (e) {
-            console.error('解析同步隊列時出錯：', e);
-            syncQueue = [];
-        }
-    }
-    
-    // 創建網絡狀態指示器
-    createOfflineIndicator();
-    
-    // 註冊 Service Worker（如果瀏覽器支援）
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/service-worker.js')
-                .then(registration => {
-                    console.log('Service Worker 註冊成功：', registration.scope);
-                })
-                .catch(error => {
-                    console.error('Service Worker 註冊失敗：', error);
-                });
-        });
-    }
-    
-    // 監聽網絡狀態變化
-    window.addEventListener('online', handleOnlineStatusChange);
-    window.addEventListener('offline', handleOnlineStatusChange);
-    
-    // 初始檢查網絡狀態
-    handleOnlineStatusChange();
-}
-
-// 處理網絡狀態變化
-function handleOnlineStatusChange() {
-    const wasOnline = isOnline;
-    isOnline = navigator.onLine;
-    isOfflineMode = !isOnline;
-    
-    console.log(`網絡狀態變化: ${wasOnline ? '在線' : '離線'} -> ${isOnline ? '在線' : '離線'}`);
-    
-    // 更新離線指示器
-    updateOfflineIndicator();
-    
-    // 如果從離線變為在線，嘗試同步
-    if (isOnline && !wasOnline && syncQueue.length > 0) {
-        console.log('網絡已恢復，嘗試同步數據...');
-        showToast('網絡已恢復連接，正在同步數據...');
-        setTimeout(trySyncQueue, 2000);
-    }
-    
-    // 如果從在線變為離線，顯示通知
-    if (!isOnline && wasOnline) {
-        showToast('網絡連接已斷開，已切換到離線模式');
-    }
-}
-
-// 創建離線模式指示器
-function createOfflineIndicator() {
-    // 檢查是否已存在
-    if (document.querySelector('.offline-indicator')) {
-        return;
-    }
-    
-    offlineIndicator = document.createElement('div');
-    offlineIndicator.className = 'offline-indicator';
-    if (isOnline) {
-        offlineIndicator.classList.add('online');
-    }
-    
-    offlineIndicator.innerHTML = `
-        <span class="offline-icon">${isOnline ? '🌐' : '📴'}</span>
-        <span class="offline-text">${isOnline ? '已連接網絡' : '離線模式'}</span>
-        <div class="sync-info">
-            <p>同步狀態:</p>
-            <ul id="sync-queue-info">
-                <li>沒有待同步的更改</li>
-            </ul>
-            <button id="sync-now-btn" ${isOnline ? '' : 'disabled'}>立即同步</button>
-        </div>
-    `;
-    
-    document.body.appendChild(offlineIndicator);
-    
-    // 添加點擊展開/收起的功能
-    offlineIndicator.addEventListener('click', function() {
-        this.classList.toggle('expanded');
-    });
-    
-    // 同步按鈕點擊事件
-    const syncButton = document.getElementById('sync-now-btn');
-    if (syncButton) {
-        syncButton.addEventListener('click', function(e) {
-            e.stopPropagation(); // 防止觸發外層的點擊事件
-            if (isOnline) {
-                trySyncQueue();
-            }
-        });
-    }
-    
-    // 初始更新同步信息
-    updateSyncInfo();
-}
-
-// 更新離線指示器
-function updateOfflineIndicator() {
-    if (!offlineIndicator) return;
-    
-    if (isOnline) {
-        offlineIndicator.classList.add('online');
-        offlineIndicator.querySelector('.offline-text').textContent = '已連接網絡';
-        offlineIndicator.querySelector('.offline-icon').textContent = '🌐';
-    } else {
-        offlineIndicator.classList.remove('online');
-        offlineIndicator.querySelector('.offline-text').textContent = '離線模式';
-        offlineIndicator.querySelector('.offline-icon').textContent = '📴';
-    }
-    
-    // 更新同步信息
-    updateSyncInfo();
-    
-    // 更新同步按鈕狀態
-    const syncButton = document.getElementById('sync-now-btn');
-    if (syncButton) {
-        syncButton.disabled = !isOnline || syncQueue.length === 0;
-    }
-}
-
-// 更新同步信息顯示
-function updateSyncInfo() {
-    if (!offlineIndicator) return;
-    
-    const syncInfo = document.getElementById('sync-queue-info');
-    if (!syncInfo) return;
-    
-    // 清空現有內容
-    syncInfo.innerHTML = '';
-    
-    if (syncQueue.length === 0) {
-        const li = document.createElement('li');
-        li.textContent = '沒有待同步的更改';
-        syncInfo.appendChild(li);
-    } else {
-        // 顯示隊列中的操作
-        const queueSummary = {};
-        syncQueue.forEach(item => {
-            if (!queueSummary[item.type]) {
-                queueSummary[item.type] = 0;
-            }
-            queueSummary[item.type]++;
-        });
-        
-        for (const [type, count] of Object.entries(queueSummary)) {
-            const li = document.createElement('li');
-            let actionText = '未知操作';
-            
-            switch (type) {
-                case 'add':
-                    actionText = '新增景點';
-                    break;
-                case 'remove':
-                    actionText = '刪除景點';
-                    break;
-                case 'reorder':
-                    actionText = '重新排序';
-                    break;
-                case 'save':
-                    actionText = '保存行程';
-                    break;
-                case 'update':
-                    actionText = '更新資訊';
-                    break;
-            }
-            
-            li.textContent = `${actionText}: ${count} 項`;
-            syncInfo.appendChild(li);
-        }
-    }
-    
-    // 更新同步按鈕狀態
-    const syncButton = document.getElementById('sync-now-btn');
-    if (syncButton) {
-        syncButton.disabled = !isOnline || syncQueue.length === 0;
-    }
-}
-
-// 添加操作到同步隊列
-function addToSyncQueue(type, data) {
-    syncQueue.push({
-        type: type,
-        data: data,
-        timestamp: new Date().toISOString()
-    });
-    
-    // 保存到本地存儲
-    localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncQueue));
-    
-    // 更新同步信息顯示
-    updateSyncInfo();
-    
-    console.log(`已添加 ${type} 操作到同步隊列，當前隊列長度: ${syncQueue.length}`);
-}
-
-// 嘗試同步數據
-function trySyncQueue() {
-    if (!isOnline || syncQueue.length === 0) {
-        return;
-    }
-    
-    console.log(`嘗試同步 ${syncQueue.length} 個操作...`);
-    showToast(`正在同步 ${syncQueue.length} 個更改...`);
-    
-    // 在這裡實現實際的同步邏輯
-    // 目前僅模擬同步成功
-    setTimeout(() => {
-        const syncCount = syncQueue.length;
-        syncQueue = [];
-        localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncQueue));
-        
-        // 更新本地存儲中的離線編輯標記
-        const savedData = localStorage.getItem(STORAGE_KEY);
-        if (savedData) {
-            try {
-                const data = JSON.parse(savedData);
-                data.offlineEdited = false;
-                data.lastSynced = new Date().toISOString();
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            } catch (error) {
-                console.error('更新本地存儲標記時出錯:', error);
-            }
-        }
-        
-        // 更新同步信息顯示
-        updateSyncInfo();
-        
-        console.log(`同步完成，處理了 ${syncCount} 個操作`);
-        showToast(`已成功同步 ${syncCount} 個更改`);
-    }, 1500);
-}
-
-// 改進的添加景點函數，支持離線模式
-async function addDestinationWithOfflineSupport(location) {
-    try {
-        // 檢查是否是離線模式
-        if (!isOnline) {
-            // 如果離線，使用本地緩存的地理編碼資料或模擬座標
-            console.log('離線模式下添加景點:', location);
-            
-            // 嘗試從緩存獲取坐標
-            let coordinates;
-            if (locationCache[location]) {
-                coordinates = locationCache[location];
-                console.log(`使用緩存的坐標: ${coordinates}`);
-            } else {
-                // 沒有緩存坐標，使用一個暫時坐標（在網絡恢復後會重新地理編碼）
-                coordinates = [25.033, 121.565]; // 預設台北座標
-                console.log('使用暫時坐標（將在網絡恢復後更新）');
-            }
-            
-            // 創建新景點物件
-            const newDestination = {
-                name: location,
-                coordinates: coordinates,
-                stayDuration: 2, // 預設停留時間
-                needsGeocoding: !locationCache[location] // 標記是否需要在網絡恢復後重新地理編碼
-            };
-            
-            // 添加到景點列表
-            destinations.push(newDestination);
-            
-            // 更新地圖和行程
-            updateMap();
-            updateItinerary();
-            
-            // 添加到同步隊列
-            addToSyncQueue('add', newDestination);
-            
-            showToast(`已添加景點（離線模式）: ${location}`);
-            
-            return true;
-        } else {
-            // 在線模式，使用原有功能
-            return await addDestination(location);
-        }
-    } catch (error) {
-        console.error('添加景點失敗:', error);
-        alert(`添加景點失敗: ${error.message}`);
-        return false;
-    }
-}
-
-// 改進的刪除景點函數，支持離線模式
-function removeDestinationWithOfflineSupport(index) {
-    try {
-        // 檢查索引是否有效
-        if (index < 0 || index >= destinations.length) {
-            console.error(`無效的景點索引: ${index}`);
-            return false;
-        }
-        
-        // 確認刪除
-        const destinationToRemove = destinations[index];
-        const confirmMessage = `確定要刪除景點"${destinationToRemove.name}"嗎？`;
-        
-        if (!confirm(confirmMessage)) {
-            return false;
-        }
-        
-        console.log(`刪除景點 [${index}]: ${destinationToRemove.name}`);
-        
-        // 刪除景點
-        destinations.splice(index, 1);
-        
-        // 更新地圖和行程
-        updateMap();
-        updateItinerary();
-        
-        // 保存當前狀態
-        saveStateToHistory();
-        
-        // 如果是離線模式，添加到同步隊列
-        if (!isOnline) {
-            addToSyncQueue('remove', destinationToRemove);
-            showToast(`已刪除景點（離線模式）: ${destinationToRemove.name}`);
-        }
-        
-        return true;
-    } catch (error) {
-        console.error('刪除景點失敗:', error);
-        alert(`刪除景點失敗: ${error.message}`);
-        return false;
-    }
-}
-
-// 改進的下拉功能，支持離線模式下的拖曳排序
-function handleDropWithOfflineSupport(e) {
-    // 原有的handleDrop邏輯
-    if (e.stopPropagation) {
-        e.stopPropagation();
-    }
-    
-    // 如果沒有拖曳項目，直接返回
-    if (draggedItem === null) {
-        return;
-    }
-    
-    // 如果目標是出發點或結束點，則不進行交換
-    if (this.dataset.isStartingPoint === "true" || this.dataset.isEndPoint === "true") {
-        return;
-    }
-    
-    // 如果目標與拖曳的項目相同，則不進行交換
-    if (this === draggedItem) {
-        return;
-    }
-    
-    // 獲取拖曳項目和目標項目的索引
-    const draggedIndex = parseInt(draggedItem.dataset.destinationIndex);
-    const targetIndex = parseInt(this.dataset.destinationIndex);
-    
-    // 確保索引有效
-    if (!isNaN(draggedIndex) && !isNaN(targetIndex) && 
-        draggedIndex >= 0 && draggedIndex < destinations.length &&
-        targetIndex >= 0 && targetIndex < destinations.length) {
-        
-        console.log(`交換目的地: 從索引 ${draggedIndex}(${destinations[draggedIndex].name}) 到 ${targetIndex}(${destinations[targetIndex].name})`);
-        
-        // 記錄重新排序的操作
-        const reorderOperation = {
-            from: draggedIndex,
-            to: targetIndex,
-            items: [
-                {index: draggedIndex, name: destinations[draggedIndex].name},
-                {index: targetIndex, name: destinations[targetIndex].name}
-            ]
-        };
-        
-        // 交換目的地順序
-        const temp = destinations[draggedIndex];
-        destinations[draggedIndex] = destinations[targetIndex];
-        destinations[targetIndex] = temp;
-        
-        // 更新地圖和行程
-        updateMap();
-        updateItinerary();
-        
-        // 保存當前狀態
-        saveStateToHistory();
-        
-        // 如果是離線模式，添加到同步隊列
-        if (!isOnline) {
-            addToSyncQueue('reorder', reorderOperation);
-            showToast('景點順序已更新（離線模式）');
-        }
-    } else {
-        console.error(`無法交換目的地: 無效的索引 (拖曳: ${draggedIndex}, 目標: ${targetIndex})`);
-    }
-    
-    // 移除所有拖曳目標樣式
-    document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    
-    return false;
-}
-
-// 改進的保存到本地存儲函數
-function saveToLocalStorageWithOfflineSupport() {
-    try {
-        const data = {
-            startingPoint: startingPoint,
-            destinations: destinations,
-            departureDate: departureDate,  // 添加 departureDate 字段
-            departureTime: departureTime,
-            maxDailyHours: maxDailyHours,
-            dailySettings: dailySettings,
-            dailyEndPoints: dailyEndPoints,
-            locationCache: locationCache,
-            lastSavedTime: new Date().toISOString(),
-            offlineEdited: !isOnline
-        };
-        
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        console.log('資料已保存到本地存儲');
-        
-        // 離線模式下，添加到同步隊列
-        if (!isOnline) {
-            addToSyncQueue('save', { timestamp: data.lastSavedTime });
-            showToast('行程已保存（離線模式）');
-        } else {
-            showToast('行程已保存');
-        }
-        
-        return true;
-    } catch (error) {
-        console.error('保存資料失敗:', error);
-        alert(`保存資料失敗: ${error.message}`);
-        return false;
-    }
-}
-
-// 初始化 - 確保這個函數會在頁面加載時被調用
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('頁面已加載，正在初始化應用...');
-    
-    // 初始化離線支援
-    initOfflineSupport();
-    
-    // 添加離線模式CSS樣式
-    addOfflineCSS();
-    
-    // 初始化地图
-    initMap();
-    
-    // 初始化事件监听器
-    initEventListeners();
-    
-    // 禁用添加景点功能，直到设置出发点
-    document.getElementById('new-destination').disabled = true;
-    document.getElementById('add-destination').disabled = true;
-    
-    // 讀取位置緩存
-    const savedLocationCache = localStorage.getItem(LOCATION_CACHE_KEY);
-    if (savedLocationCache) {
-        try {
-            locationCache = JSON.parse(savedLocationCache);
-            console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
-        } catch (error) {
-            console.error('解析位置緩存時出錯:', error);
-            locationCache = {};
-        }
-    }
-    
-    // 嘗試讀取已儲存的行程
-    loadFromLocalStorage();
-    
-    // 看是否有從管理頁面選擇的行程
-    const selectedItineraryName = sessionStorage.getItem('selected_itinerary');
-    if (selectedItineraryName) {
-        // 清除，避免重複載入
-        sessionStorage.removeItem('selected_itinerary');
-        
-        // 載入選定的行程
-        loadSelectedItinerary(selectedItineraryName);
-    }
-    
-    // 應用程式初始化後，保存第一個狀態到歷史記錄
-    setTimeout(() => {
-        saveStateToHistory();
-        console.log('已保存初始狀態到歷史記錄');
-    }, 1000);
-    
-    // 檢查URL中是否包含經緯度參數
-    parseLocationFromUrl();
-    
-    console.log('應用初始化完成');
-});
-
-// 修改原始 addDestination 函數，使其使用離線支持版本
-document.getElementById('add-destination').addEventListener('click', async function() {
-    const destinationInput = document.getElementById('new-destination');
-    const destination = destinationInput.value.trim();
-    
-    if (destination) {
-        // 使用支持離線操作的版本
-        const success = await addDestinationWithOfflineSupport(destination);
-        if (success) {
-            destinationInput.value = '';
-        }
-    } else {
-        alert('請輸入景點名稱');
-    }
-});
-
-// 修改更新行程函數中的刪除按鈕處理，加入離線支持
-function updateItinerary() {
-    // ... existing code ...
-    
-    // 修改移除按鈕的事件處理
-    const removeButtons = document.querySelectorAll('.remove-btn');
-    removeButtons.forEach((button, index) => {
-        button.addEventListener('click', function() {
-            // 使用支持離線操作的版本
-            removeDestinationWithOfflineSupport(index);
-        });
-    });
-    
-    // ... existing code ...
-    
-    // 處理拖曳相關
-    const destinationItems = document.querySelectorAll('.destination-item');
-    destinationItems.forEach(item => {
-        item.addEventListener('dragstart', handleDragStart);
-        item.addEventListener('dragenter', handleDragEnter);
-        item.addEventListener('dragover', handleDragOver);
-        item.addEventListener('dragleave', handleDragLeave);
-        item.addEventListener('drop', handleDropWithOfflineSupport); // 使用支持離線操作的版本
-        item.addEventListener('dragend', handleDragEnd);
-        
-        // 添加觸摸事件處理
-        item.addEventListener('touchstart', handleTouchStart);
-        item.addEventListener('touchmove', handleTouchMove);
-        item.addEventListener('touchend', handleTouchEnd);
-        item.addEventListener('touchcancel', handleTouchEnd);
-    });
-    
-    // ... existing code ...
-}
-
-// 修改保存按鈕處理，使用支持離線操作的版本
-document.getElementById('save-itinerary').addEventListener('click', function() {
-    saveToLocalStorageWithOfflineSupport();
-});
-
-// 修改本地存儲的加載函數，處理離線標記數據
-function loadFromLocalStorage() {
-    console.log('嘗試從本地存儲讀取行程數據...');
-    const savedData = localStorage.getItem(STORAGE_KEY);
-    
-    if (!savedData) {
-        console.log('本地存儲中沒有找到行程數據');
-        return false;
-    }
-    
-    try {
-        console.log('解析本地存儲數據...');
-        const data = JSON.parse(savedData);
-        
-        // 更詳細的檢查和日誌
-        if (!data.startingPoint) {
-            console.warn('警告：本地存儲中的行程數據沒有起始點');
-        } else {
-            console.log(`載入起始點: ${data.startingPoint.name || '未命名地點'}`);
-        }
-        
-        if (!data.destinations || !Array.isArray(data.destinations) || data.destinations.length === 0) {
-            console.warn('警告：本地存儲中的行程數據沒有目的地或目的地不是有效的陣列');
-        } else {
-            console.log(`載入 ${data.destinations.length} 個景點`);
-        }
-        
-        // 賦值前先進行有效性檢查
-        startingPoint = data.startingPoint || null;
-        destinations = Array.isArray(data.destinations) ? data.destinations : [];
-        
-        // 讀取日期和時間設定
-        departureDate = data.departureDate || null;
-        console.log(`載入出發日期: ${departureDate || '未設定'}`);
-        
-        departureTime = data.departureTime || "09:00";
-        console.log(`載入出發時間: ${departureTime}`);
-        
-        maxDailyHours = data.maxDailyHours || 8;
-        console.log(`載入每日最大行程時間: ${maxDailyHours} 小時`);
-        
-        // 讀取進階設定
-        dailySettings = Array.isArray(data.dailySettings) ? data.dailySettings : [];
-        dailyEndPoints = Array.isArray(data.dailyEndPoints) ? data.dailyEndPoints : [];
-        locationCache = data.locationCache || {};
-        
-        // 檢查是否有離線編輯標記
-        if (data.offlineEdited) {
-            console.log('檢測到離線編輯的數據');
-            showToast('已加載離線編輯的行程，網絡連接時請同步');
-            
-            // 檢查是否有需要重新地理編碼的項目
-            if (isOnline) {
-                const needGeocoding = destinations.filter(dest => dest.needsGeocoding);
-                if (needGeocoding.length > 0) {
-                    console.log(`發現 ${needGeocoding.length} 個需要重新地理編碼的景點`);
-                    showToast(`正在更新 ${needGeocoding.length} 個景點的位置資訊...`);
-                    
-                    // 異步更新這些點的地理編碼
-                    setTimeout(async () => {
-                        for (const dest of needGeocoding) {
-                            try {
-                                console.log(`重新地理編碼: ${dest.name}`);
-                                const coordinates = await geocodeLocation(dest.name);
-                                dest.coordinates = coordinates;
-                                dest.needsGeocoding = false;
-                                
-                                // 更新緩存
-                                locationCache[dest.name] = coordinates;
-                            } catch (error) {
-                                console.error(`無法重新地理編碼 ${dest.name}:`, error);
-                            }
-                        }
-                        
-                        // 更新地圖和行程
-                        updateMap();
-                        updateItinerary();
-                        saveToLocalStorageWithOfflineSupport();
-                    }, 1000);
-                }
-            }
-        }
-        
-        // 更新UI
-        try {
-            if (startingPoint) {
-                document.getElementById('starting-point').value = startingPoint.name || '';
-            } else {
-                document.getElementById('starting-point').value = '';
-            }
-            
-            updateDepartureTimeInputs();
-            document.getElementById('max-daily-hours').value = maxDailyHours;
-        } catch (uiError) {
-            console.error('更新UI時出錯:', uiError);
-        }
-        
-        // 更新地圖和行程
-        try {
-            updateMap();
-            updateItinerary();
-        } catch (updateError) {
-            console.error('更新地圖或行程時出錯:', updateError);
-            alert(`更新顯示時出錯: ${updateError.message}`);
-        }
-        
-        console.log('從本地存儲加載行程成功');
-        showToast('行程加載成功');
-        
-        return true;
-    } catch (error) {
-        console.error('解析本地存儲資料時出錯:', error);
-        console.error('錯誤詳情:', error.stack);
-        console.log('原始數據:', savedData);
-        alert(`加載行程時出錯: ${error.message}\n請嘗試修復本地存儲或重新添加行程`);
-        return false;
-    }
-}
-
-// 頁面加載時，初始化並加載數據
-window.addEventListener('load', function() {
-    // 安裝提示處理
-    let deferredPrompt;
-    
-    // 處理安裝提示事件
-    window.addEventListener('beforeinstallprompt', (e) => {
-        // 阻止自動顯示安裝提示
-        e.preventDefault();
-        
-        // 保存事件以供稍後使用
-        deferredPrompt = e;
-        
-        // 檢查是否應該顯示安裝提示
-        const hideInstallPrompt = localStorage.getItem('hideInstallPrompt');
-        if (!hideInstallPrompt) {
-            showInstallPrompt();
-        }
-    });
-    
-    // 顯示安裝提示
-    function showInstallPrompt() {
-        if (!deferredPrompt) return;
-        
-        // 檢查提示是否已存在
-        if (document.querySelector('.install-prompt')) return;
-        
-        // 創建安裝提示元素
-        const prompt = document.createElement('div');
-        prompt.className = 'install-prompt';
-        prompt.innerHTML = `
-            <div class="install-prompt-text">
-                <h3>安裝旅遊規劃助手應用</h3>
-                <p>安裝到您的設備，即使離線也能使用！</p>
-            </div>
-            <button class="install-btn">安裝</button>
-            <button class="close-install-prompt">&times;</button>
-        `;
-        
-        // 插入到頁面中
-        const container = document.querySelector('.container');
-        if (container) {
-            container.insertBefore(prompt, container.firstChild);
-            
-            // 添加安裝按鈕事件
-            prompt.querySelector('.install-btn').addEventListener('click', async () => {
-                // 顯示安裝提示
-                deferredPrompt.prompt();
-                
-                // 等待用戶回應
-                const { outcome } = await deferredPrompt.userChoice;
-                console.log(`用戶安裝選擇: ${outcome}`);
-                
-                // 清除提示
-                deferredPrompt = null;
-                
-                // 移除提示元素
-                if (document.body.contains(prompt)) {
-                    prompt.remove();
-                }
-            });
-            
-            // 添加關閉按鈕事件
-            prompt.querySelector('.close-install-prompt').addEventListener('click', () => {
-                // 記住用戶不想看到安裝提示
-                localStorage.setItem('hideInstallPrompt', 'true');
-                
-                // 移除提示元素
-                if (document.body.contains(prompt)) {
-                    prompt.remove();
-                }
-            });
-        }
-    }
-});
-
-// 添加離線模式所需的CSS樣式
-function addOfflineCSS() {
-    const style = document.createElement('style');
-    style.textContent = `
-        .offline-indicator {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background-color: rgba(244, 67, 54, 0.9);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            display: flex;
-            align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            z-index: 9999;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            max-width: 300px;
-        }
-        
-        .offline-indicator.online {
-            background-color: rgba(76, 175, 80, 0.9);
-        }
-        
-        .offline-icon {
-            margin-right: 8px;
-            font-size: 18px;
-        }
-        
-        .offline-text {
-            font-weight: bold;
-            font-size: 14px;
-        }
-        
-        .offline-indicator.expanded {
-            bottom: 20px;
-            width: 300px;
-            border-radius: 8px;
-            padding: 15px;
-        }
-        
-        .sync-info {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            width: 100%;
-        }
-        
-        .offline-indicator.expanded .sync-info {
-            max-height: 500px;
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        .sync-info p {
-            margin: 0 0 8px 0;
-            font-size: 14px;
-        }
-        
-        .sync-info ul {
-            margin: 0;
-            padding-left: 20px;
-            font-size: 12px;
-        }
-        
-        .sync-info li {
-            margin-bottom: 4px;
-        }
-        
-        #sync-now-btn {
-            background-color: white;
-            color: #f44336;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 4px;
-            margin-top: 10px;
-            font-size: 12px;
-            cursor: pointer;
-            width: auto;
-            display: block;
-        }
-        
-        #sync-now-btn:hover {
-            background-color: #f5f5f5;
-        }
-        
-        .offline-edit-indicator {
-            display: inline-block;
-            background-color: #f44336;
-            color: white;
-            font-size: 10px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            margin-left: 5px;
-            vertical-align: middle;
-        }
-    `;
-    document.head.appendChild(style);
-}
-
-// 更新出發時間輸入框的顯示
-function updateDepartureTimeInputs() {
-    if (departureDate) {
-        document.getElementById('departure-date').value = departureDate;
-    }
-    if (departureTime) {
-        document.getElementById('departure-time').value = departureTime;
-    }
-}
-
-// 顯示通知提示
-function showToast(message, duration = 3000) {
-    // 檢查是否已存在 toast
-    let toast = document.querySelector('.toast-message');
-    
-    // 如果已存在，則移除
-    if (toast) {
-        document.body.removeChild(toast);
-    }
-    
-    // 創建新的 toast
-    toast = document.createElement('div');
-    toast.className = 'toast-message';
-    toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background-color: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 5px;
-        z-index: 10000;
-        font-size: 14px;
-        max-width: 80%;
-        text-align: center;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-        animation: fadeIn 0.3s ease;
-    `;
-    
-    // 添加到頁面
-    document.body.appendChild(toast);
-    
-    // 設置自動消失
-    setTimeout(() => {
-        if (document.body.contains(toast)) {
-            toast.style.animation = 'fadeOut 0.3s ease';
-            toast.addEventListener('animationend', () => {
-                if (document.body.contains(toast)) {
-                    document.body.removeChild(toast);
-                }
-            });
-        }
-    }, duration);
-}
-
-// 添加 CSS 動畫
-(function() {
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translate(-50%, 20px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
-        }
-        
-        @keyframes fadeOut {
-            from { opacity: 1; transform: translate(-50%, 0); }
-            to { opacity: 0; transform: translate(-50%, 20px); }
-        }
-    `;
-    document.head.appendChild(style);
-})();

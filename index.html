@@ -4,35 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>旅遊規劃助手</title>
-    <meta name="description" content="規劃您的完美旅遊行程，支持離線編輯和多日行程安排">
-    <meta name="theme-color" content="#4a89dc">
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="images/icon-192x192.png">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then(registration => {
-                        console.log('Service Worker 註冊成功，範圍：', registration.scope);
-                    })
-                    .catch(error => {
-                        console.error('Service Worker 註冊失敗：', error);
-                    });
-            });
-        }
-    </script>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>旅遊規劃助手</h1>
-            <div id="connection-status" class="connection-status online">
-                <span class="status-icon">🔵</span>
-                <span class="status-text">已連接</span>
-            </div>
         </header>
         
         <main>
@@ -118,104 +96,12 @@
         </main>
         
         <footer>
-            <p>旅遊規劃助手 &copy; 2023 | <a href="#" id="offline-status">離線狀態</a> | <a href="#" id="sync-now">立即同步</a></p>
+            <p>旅遊規劃助手 &copy; 2023</p>
         </footer>
-        
-        <div id="offline-dialog" class="modal" style="display: none;">
-            <div class="modal-content">
-                <h3>離線狀態</h3>
-                <div id="offline-details">載入中...</div>
-                <button id="close-offline-dialog">關閉</button>
-            </div>
-        </div>
     </div>
     
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="transportationSystems.js"></script>
     <script src="app.js"></script>
-    
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            function updateOnlineStatus() {
-                const statusElement = document.getElementById('connection-status');
-                const isOnline = navigator.onLine;
-                
-                statusElement.className = isOnline ? 
-                    'connection-status online' : 
-                    'connection-status offline';
-                
-                statusElement.innerHTML = isOnline ? 
-                    '<span class="status-icon">🔵</span><span class="status-text">已連接</span>' : 
-                    '<span class="status-icon">🔴</span><span class="status-text">離線模式</span>';
-            }
-            
-            updateOnlineStatus();
-            
-            window.addEventListener('online', updateOnlineStatus);
-            window.addEventListener('offline', updateOnlineStatus);
-            
-            document.getElementById('offline-status').addEventListener('click', function(e) {
-                e.preventDefault();
-                
-                const dialog = document.getElementById('offline-dialog');
-                const detailsElement = document.getElementById('offline-details');
-                
-                if (typeof syncQueue !== 'undefined') {
-                    let html = `<p>網絡狀態：${navigator.onLine ? '已連接' : '離線'}</p>`;
-                    
-                    if (syncQueue.length > 0) {
-                        html += `<p>待同步項目：${syncQueue.length}</p>`;
-                        html += '<ul>';
-                        
-                        const displayItems = syncQueue.slice(0, 10);
-                        displayItems.forEach(item => {
-                            html += `<li>${item.type}: ${item.data ? item.data.name || '未命名' : '無數據'}</li>`;
-                        });
-                        
-                        if (syncQueue.length > 10) {
-                            html += `<li>...還有 ${syncQueue.length - 10} 個項目</li>`;
-                        }
-                        
-                        html += '</ul>';
-                        
-                        if (navigator.onLine) {
-                            html += '<button id="sync-dialog-btn">立即同步</button>';
-                        }
-                    } else {
-                        html += '<p>沒有待同步項目</p>';
-                    }
-                } else {
-                    html = `<p>網絡狀態：${navigator.onLine ? '已連接' : '離線'}</p>
-                            <p>離線功能未初始化或未檢測到同步數據</p>`;
-                }
-                
-                detailsElement.innerHTML = html;
-                dialog.style.display = 'block';
-                
-                const syncBtn = document.getElementById('sync-dialog-btn');
-                if (syncBtn) {
-                    syncBtn.addEventListener('click', function() {
-                        if (typeof attemptSync === 'function') {
-                            attemptSync();
-                            dialog.style.display = 'none';
-                        }
-                    });
-                }
-            });
-            
-            document.getElementById('close-offline-dialog').addEventListener('click', function() {
-                document.getElementById('offline-dialog').style.display = 'none';
-            });
-            
-            document.getElementById('sync-now').addEventListener('click', function(e) {
-                e.preventDefault();
-                if (typeof attemptSync === 'function') {
-                    attemptSync();
-                } else {
-                    alert('同步功能未初始化');
-                }
-            });
-        });
-    </script>
 </body>
 </html>
