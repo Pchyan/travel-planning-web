@@ -716,3 +716,58 @@ footer {
     color: white;
     border-color: #4a89dc;
 }
+
+/* 搜尋半徑控制區域樣式 */
+.radius-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f5f7fa;
+    border-radius: 6px;
+    border-left: 4px solid #4a89dc;
+}
+
+.radius-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.radius-controls label {
+    min-width: 125px;
+}
+
+.radius-controls input[type="range"] {
+    flex: 1;
+    min-width: 150px;
+}
+
+.radius-controls span {
+    min-width: 30px;
+    text-align: center;
+}
+
+.apply-button {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.apply-button:hover {
+    background-color: #3a70c0;
+}
+
+/* 距離資訊的樣式 */
+.distance-info {
+    background-color: #e8f5e9;
+    color: #2E7D32;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+}

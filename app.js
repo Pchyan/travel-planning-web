@@ -642,15 +642,27 @@ function determineStayDuration(location) {
 
 // 计算两点之间的距离（公里）
 function calculateDistance(coord1, coord2) {
-    // 使用Haversine公式计算两点之间的距离
-    const R = 6371; // 地球半径（公里）
-    const dLat = (coord2[0] - coord1[0]) * Math.PI / 180;
-    const dLon = (coord2[1] - coord1[1]) * Math.PI / 180;
+    // 使用 Haversine 公式計算兩點之間的距離
+    // coord1 與 coord2 為 [緯度, 經度] 格式
+    const R = 6371; // 地球半徑（公里）
+    
+    // 將經緯度轉換為弧度
+    const lat1 = coord1[0] * Math.PI / 180;
+    const lon1 = coord1[1] * Math.PI / 180;
+    const lat2 = coord2[0] * Math.PI / 180;
+    const lon2 = coord2[1] * Math.PI / 180;
+    
+    // Haversine 公式計算
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(coord1[0] * Math.PI / 180) * Math.cos(coord2[0] * Math.PI / 180) * 
+              Math.cos(lat1) * Math.cos(lat2) * 
               Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+    const distance = R * c;
+    
+    // 返回距離（公里），並保留小數點後兩位
+    return Math.round(distance * 100) / 100;
 }
 
 // 确定两点之间的最佳交通方式
@@ -4210,33 +4222,74 @@ function getPopularAttractionsOfType(type, limit = 2, country = null) {
 }
 
 // 根據座標獲取附近的景點
-function getNearbyAttractions(coordinates, radius = 50, limit = 3, country = null) {
+function getNearbyAttractions(coordinates, radius = 15, limit = 3, country = null) {
+    // 確保座標格式正確
+    if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+        console.error('無效的座標格式', coordinates);
+        return [];
+    }
+    
     // 獲取所有景點
     const allAttractions = getPopularAttractions(50, country);
     
+    // 如果沒有可用景點，返回空數組
+    if (!allAttractions || allAttractions.length === 0) {
+        return [];
+    }
+    
     // 計算每個景點到指定座標的距離
     const attractionsWithDistance = allAttractions.map(attraction => {
+        // 確保景點有有效的座標
+        if (!attraction.coordinates || !Array.isArray(attraction.coordinates) || attraction.coordinates.length !== 2) {
+            console.warn('景點缺少有效座標', attraction.name);
+            return { ...attraction, distance: Infinity };
+        }
+        
         const distance = calculateDistance(coordinates, attraction.coordinates);
         return { ...attraction, distance };
     });
     
     // 篩選在指定半徑內的景點
-    const nearbyAttractions = attractionsWithDistance
-        .filter(attraction => attraction.distance <= radius) // 公里為單位
+    let nearbyAttractions = attractionsWithDistance
+        .filter(attraction => attraction.distance <= radius) // 確保距離在範圍內
         .sort((a, b) => a.distance - b.distance); // 按距離從近到遠排序
+    
+    // 如果半徑內沒有足夠的景點，可以擴大搜尋範圍
+    if (nearbyAttractions.length < limit) {
+        console.log(`在 ${radius} 公里內只找到 ${nearbyAttractions.length} 個景點，嘗試擴大搜尋範圍`);
+        // 如果在指定半徑內找不到足夠的景點，使用最近的景點
+        nearbyAttractions = attractionsWithDistance
+            .sort((a, b) => a.distance - b.distance)
+            .slice(0, limit);
+    }
+    
+    // 添加距離資訊到景點描述
+    nearbyAttractions = nearbyAttractions.map(attraction => {
+        // 添加距離資訊到描述中，如果描述末尾沒有句號則添加
+        const description = attraction.description.endsWith('.') ? 
+            attraction.description : 
+            `${attraction.description}。`;
+            
+        return {
+            ...attraction,
+            description: `${description} 距離: ${attraction.distance} 公里`
+        };
+    });
     
     // 返回指定數量的附近景點
     return nearbyAttractions.slice(0, limit);
 }
 
 // 獲取當前行程中所有位置的附近景點推薦
-function getNearbyAttractionsForItinerary(limit = 5) {
+function getNearbyAttractionsForItinerary(limit = 5, useCustomRadius = false, customRadius = 10) {
     const recommendations = [];
     const usedNames = new Set(); // 用於避免重複推薦
+    let baseRadius = useCustomRadius ? customRadius : 10; // 默認半徑或自定義半徑
     
     // 從出發點開始尋找附近景點
     if (startingPoint) {
-        const nearbyFromStart = getNearbyAttractions(startingPoint.coordinates, 30, 3);
+        console.log(`從出發點 ${startingPoint.name} 尋找半徑 ${baseRadius} 公里內的景點`);
+        const nearbyFromStart = getNearbyAttractions(startingPoint.coordinates, baseRadius, 3);
         nearbyFromStart.forEach(attraction => {
             if (!usedNames.has(attraction.name) && 
                 !destinations.some(d => d.name === attraction.name)) {
@@ -4246,13 +4299,15 @@ function getNearbyAttractionsForItinerary(limit = 5) {
         });
     }
     
-    // 從每個已選擇的景點尋找附近景點
+    // 從每個已選擇的景點尋找附近景點，使用略小的半徑
     for (const destination of destinations) {
         // 如果已經收集足夠的推薦，則停止
         if (recommendations.length >= limit) break;
         
-        // 尋找該景點附近的其他景點
-        const nearby = getNearbyAttractions(destination.coordinates, 20, 2);
+        // 尋找該景點附近的其他景點，使用基礎半徑的 80%
+        const destinationRadius = baseRadius * 0.8;
+        console.log(`從目的地 ${destination.name} 尋找半徑 ${destinationRadius} 公里內的景點`);
+        const nearby = getNearbyAttractions(destination.coordinates, destinationRadius, 2);
         nearby.forEach(attraction => {
             // 避免重複推薦和已選擇的景點
             if (!usedNames.has(attraction.name) && 
@@ -4268,6 +4323,7 @@ function getNearbyAttractionsForItinerary(limit = 5) {
     
     // 如果推薦數量不足，添加熱門景點補充
     if (recommendations.length < limit) {
+        console.log(`附近景點推薦不足 ${limit} 個，添加熱門景點補充`);
         const remainingCount = limit - recommendations.length;
         const popularAttractions = getPopularAttractions(remainingCount * 2);
         
@@ -4282,6 +4338,7 @@ function getNearbyAttractionsForItinerary(limit = 5) {
         }
     }
     
+    console.log(`總共推薦了 ${recommendations.length} 個景點`);
     return recommendations;
 }
 
@@ -4310,6 +4367,9 @@ function showRecommendationsDialog() {
     
     // 取得基於偏好的推薦景點
     let recommendations = getRecommendedAttractions(5);
+    
+    // 默認搜尋半徑
+    let searchRadius = 10; // 公里
     
     // 創建對話框
     const dialogId = 'recommendations-dialog';
@@ -4353,6 +4413,21 @@ function showRecommendationsDialog() {
     `;
     content.appendChild(recommendationTypeSection);
     
+    // 搜尋半徑設定（僅在附近景點模式顯示）
+    const radiusSection = document.createElement('div');
+    radiusSection.className = 'radius-section';
+    radiusSection.style.display = 'none'; // 默認隱藏
+    radiusSection.innerHTML = `
+        <h4>附近景點搜尋範圍</h4>
+        <div class="radius-controls">
+            <label for="search-radius">搜尋半徑 (公里)：</label>
+            <input type="range" id="search-radius" min="1" max="30" value="${searchRadius}">
+            <span id="radius-value">${searchRadius}</span>
+            <button id="apply-radius" class="apply-button">應用</button>
+        </div>
+    `;
+    content.appendChild(radiusSection);
+    
     // 偏好設定部分
     const preferencesSection = document.createElement('div');
     preferencesSection.className = 'preferences-section';
@@ -4383,20 +4458,30 @@ function showRecommendationsDialog() {
         switch (type) {
             case 'nearby':
                 if (startingPoint || destinations.length > 0) {
-                    recommendations = getNearbyAttractionsForItinerary(5);
+                    // 更新顯示搜尋半徑設定
+                    radiusSection.style.display = 'block';
+                    
+                    // 使用當前設定的搜尋半徑
+                    recommendations = getNearbyAttractionsForItinerary(5, true, searchRadius);
                 } else {
                     alert('請先設置出發點或添加至少一個景點，以便推薦附近景點');
                     return;
                 }
                 break;
             case 'taiwan':
+                // 隱藏搜尋半徑設定
+                radiusSection.style.display = 'none';
                 recommendations = getPopularAttractions(8, '台灣');
                 break;
             case 'japan':
+                // 隱藏搜尋半徑設定
+                radiusSection.style.display = 'none';
                 recommendations = getPopularAttractions(8, '日本');
                 break;
             case 'preference':
             default:
+                // 隱藏搜尋半徑設定
+                radiusSection.style.display = 'none';
                 recommendations = getRecommendedAttractions(5);
                 break;
         }
@@ -4423,7 +4508,7 @@ function showRecommendationsDialog() {
                                     <span>類型: ${attraction.type || '未知'}</span>
                                     <span>地區: ${attraction.region || '未知'}</span>
                                     <span>國家: ${attraction.country || '未知'}</span>
-                                    ${attraction.distance ? `<span>距離: ${attraction.distance.toFixed(1)} 公里</span>` : ''}
+                                    ${attraction.distance ? `<span class="distance-info">距離: ${attraction.distance} 公里</span>` : ''}
                                     <span>建議停留: ${attraction.stayDuration || 1} 小時</span>
                                 </div>
                             </div>
@@ -4521,5 +4606,21 @@ function showRecommendationsDialog() {
     const adventureValue = dialog.querySelector('#adventure-level-value');
     adventureSlider.addEventListener('input', () => {
         adventureValue.textContent = adventureSlider.value;
+    });
+    
+    // 搜尋半徑滑塊事件
+    const radiusSlider = dialog.querySelector('#search-radius');
+    const radiusValue = dialog.querySelector('#radius-value');
+    radiusSlider.addEventListener('input', () => {
+        radiusValue.textContent = radiusSlider.value;
+        searchRadius = parseInt(radiusSlider.value, 10);
+    });
+    
+    // 應用半徑按鈕事件
+    dialog.querySelector('#apply-radius').addEventListener('click', () => {
+        // 應用新的搜尋半徑
+        searchRadius = parseInt(dialog.querySelector('#search-radius').value, 10);
+        // 更新附近景點推薦
+        updateRecommendations('nearby');
     });
 }
