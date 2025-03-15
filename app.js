@@ -1403,7 +1403,10 @@ function updateItinerary() {
             <div class="time-progress" style="height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-bottom: 15px;">
                 <div style="height: 100%; width: ${scheduledPercentage}%; background-color: ${scheduledPercentage > 90 ? '#e74c3c' : '#4CAF50'}; border-radius: 3px;"></div>
             </div>
-            <div style="text-align: right; margin-bottom: 10px;">
+            <div style="text-align: right; margin-bottom: 10px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">
+                    <i class="fas fa-route"></i> 路徑最佳化
+                </button>
                 <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">
                     <i class="fas fa-plus-circle"></i> 在此日添加景點
                 </button>
@@ -2327,51 +2330,28 @@ function optimizeDayItinerary(dayIndex) {
         return;
     }
     
-    // 保留當天的起點（可能是出發點或前一天的最後一個景點）
+    // 保留當天的第一個景點（起點）
     const startPoint = day[0];
     
-    // 檢查當前天是否有設定結束地點
-    const dayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === dayIndex);
+    // 保留當天的最後一個景點（終點）
+    const lastPoint = day[day.length - 1];
     
-    // 獲取當天的所有景點（排除起點）
-    const dayDestinations = day.slice(1);
-    
-    if (dayDestinations.length <= 1) {
+    // 如果只有起點和終點，或只有三個點（起點、一個中間點、終點），則無需優化
+    if (day.length <= 3) {
         alert('此天可優化的景點數量太少！');
         return;
     }
     
-    // 檢查最後一個景點是否是結束地點
-    let endPoint = null;
-    let lastDestinationIndex = -1;
+    // 獲取需要優化的中間景點（排除第一個和最後一個）
+    const middleDestinations = day.slice(1, day.length - 1);
     
-    if (dayEndPoint) {
-        // 尋找結束地點在當天景點中的位置
-        lastDestinationIndex = dayDestinations.findIndex(d => 
-            d.name === dayEndPoint.endPoint.name && 
-            d.coordinates[0] === dayEndPoint.endPoint.coordinates[0] && 
-            d.coordinates[1] === dayEndPoint.endPoint.coordinates[1]
-        );
-        
-        if (lastDestinationIndex !== -1) {
-            endPoint = dayDestinations[lastDestinationIndex];
-            // 從待優化列表中移除結束地點
-            dayDestinations.splice(lastDestinationIndex, 1);
-        }
-    }
+    console.log(`開始優化第 ${dayIndex + 1} 天的行程，保留起點 "${startPoint.name}" 和終點 "${lastPoint.name}"，優化 ${middleDestinations.length} 個中間景點`);
     
-    console.log(`開始優化第 ${dayIndex + 1} 天的行程，包含 ${dayDestinations.length} 個景點，${endPoint ? '有設定結束地點' : '沒有結束地點'}`);
+    // 查找目前全局destinations中當天中間景點的位置
+    let middleDestinationIndices = [];
+    let firstMiddleDestinationIndex = -1; // 記錄第一個中間景點的索引，作為插入位置參考
     
-    if (dayDestinations.length <= 1 && endPoint) {
-        alert('此天除起點和終點外，只有一個或沒有景點，無需優化！');
-        return;
-    }
-    
-    // 查找目前全局destinations中當天所有景點的位置（除了起點和終點）
-    let allDayDestinationIndices = [];
-    let firstDayDestinationIndex = -1; // 記錄第一個景點的索引，作為插入位置參考
-    
-    for (const destination of dayDestinations) {
+    for (const destination of middleDestinations) {
         const index = destinations.findIndex(d => 
             d.name === destination.name && 
             d.coordinates[0] === destination.coordinates[0] && 
@@ -2379,26 +2359,26 @@ function optimizeDayItinerary(dayIndex) {
         );
         
         if (index !== -1) {
-            if (firstDayDestinationIndex === -1) {
-                firstDayDestinationIndex = index;
+            if (firstMiddleDestinationIndex === -1) {
+                firstMiddleDestinationIndex = index;
             }
-            allDayDestinationIndices.push(index);
+            middleDestinationIndices.push(index);
         }
     }
     
-    // 確認是否所有景點都找到了
-    if (allDayDestinationIndices.length !== dayDestinations.length) {
-        console.error('無法找到所有當天景點在全局destinations中的位置');
+    // 確認是否所有中間景點都找到了
+    if (middleDestinationIndices.length !== middleDestinations.length) {
+        console.error('無法找到所有中間景點在全局destinations中的位置');
         alert('優化失敗：無法匹配所有景點');
         return;
     }
     
-    // 將當天景點（除了起點和終點）保存下來
-    const dayDestinationsCopy = allDayDestinationIndices.map(index => ({...destinations[index]}));
+    // 將中間景點保存下來
+    const middleDestinationsCopy = middleDestinationIndices.map(index => ({...destinations[index]}));
     
-    // 使用最近鄰算法優化景點順序
-    const optimizedDestinations = [];
-    const destinationsToOptimize = [...dayDestinationsCopy];
+    // 使用最近鄰算法優化中間景點順序
+    const optimizedMiddleDestinations = [];
+    const destinationsToOptimize = [...middleDestinationsCopy];
     
     // 從起點開始計算
     let lastCoordinates = startPoint.coordinates;
@@ -2416,35 +2396,34 @@ function optimizeDayItinerary(dayIndex) {
             }
         }
         
-        // 添加到優化後的行程中
-        const nextDestination = destinationsToOptimize[nearestIndex];
-        optimizedDestinations.push(nextDestination);
-        lastCoordinates = nextDestination.coordinates;
+        // 添加最近的景點到優化後列表
+        const nearestDestination = destinationsToOptimize[nearestIndex];
+        optimizedMiddleDestinations.push(nearestDestination);
+        
+        // 更新最後的坐標
+        lastCoordinates = nearestDestination.coordinates;
+        
+        // 從待優化列表中移除已添加的景點
         destinationsToOptimize.splice(nearestIndex, 1);
     }
     
-    // 如果有結束地點，加回到優化後的列表
-    if (endPoint) {
-        optimizedDestinations.push(endPoint);
-    }
-    
-    console.log('優化後的景點順序:', optimizedDestinations.map(d => d.name));
-    
-    // 從全局destinations中移除當天的所有景點
-    // 注意：我們需要從後往前刪除，避免索引變化
-    allDayDestinationIndices.sort((a, b) => b - a);
-    for (const index of allDayDestinationIndices) {
+    // 從全局destinations中移除所有中間景點
+    // 為了避免索引變化，需要從後向前移除
+    middleDestinationIndices.sort((a, b) => b - a).forEach(index => {
         destinations.splice(index, 1);
-    }
+    });
     
-    // 在第一個景點的位置插入優化後的景點
-    destinations.splice(firstDayDestinationIndex, 0, ...optimizedDestinations);
+    // 在firstMiddleDestinationIndex位置插入優化後的中間景點
+    destinations.splice(firstMiddleDestinationIndex, 0, ...optimizedMiddleDestinations);
     
     // 更新地圖和行程
     updateMap();
     updateItinerary();
     
-    alert(`已優化第 ${dayIndex + 1} 天的行程順序！`);
+    // 保存歷史狀態
+    saveStateToHistory();
+    
+    alert(`已完成第 ${dayIndex + 1} 天的路徑最佳化！已保留起點和終點，並按最佳路線重新排序中間的 ${optimizedMiddleDestinations.length} 個景點。`);
 }
 
 // 編輯特定日期的設定
