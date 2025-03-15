@@ -4227,6 +4227,55 @@ function initializeViewModeSelector() {
         }
     });
     
+    // 添加觸控滑動支持
+    let touchStartX = 0;
+    let touchEndX = 0;
+    let touchStartY = 0; // 追蹤垂直滑動
+    const touchThreshold = 75; // 滑動閾值，超過這個距離才算有效滑動
+    
+    daysContainer.addEventListener('touchstart', (e) => {
+        if (viewMode !== 'page') return;
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY; // 記錄起始Y座標
+    });
+    
+    daysContainer.addEventListener('touchend', (e) => {
+        if (viewMode !== 'page') return;
+        
+        const touch = e.changedTouches[0];
+        touchEndX = touch.screenX;
+        const touchEndY = touch.screenY;
+        
+        // 計算水平和垂直滑動距離
+        const touchDistanceX = touchEndX - touchStartX;
+        const touchDistanceY = Math.abs(touchEndY - touchStartY);
+        
+        // 確保是水平滑動（水平滑動距離大於垂直滑動）
+        if (Math.abs(touchDistanceX) > touchThreshold && Math.abs(touchDistanceX) > touchDistanceY * 1.5) {
+            // 防止事件冒泡，避免觸發其他元素的點擊事件
+            e.preventDefault();
+            
+            if (touchDistanceX > 0 && !prevDayBtn.disabled) {
+                // 向右滑動，顯示上一天
+                navigateToDay(currentDayIndex - 1);
+            } else if (touchDistanceX < 0 && !nextDayBtn.disabled) {
+                // 向左滑動，顯示下一天
+                navigateToDay(currentDayIndex + 1);
+            }
+            
+            // 提供視覺反饋
+            const activeDay = document.querySelector('.day-card.active-day');
+            if (activeDay) {
+                activeDay.style.transition = 'transform 0.3s ease-out';
+                activeDay.style.transform = 'translateX(0)';
+                setTimeout(() => {
+                    activeDay.style.transition = '';
+                    activeDay.style.transform = '';
+                }, 300);
+            }
+        }
+    });
+    
     // 初始化視圖模式
     switchViewMode(viewMode);
 }
@@ -4243,6 +4292,13 @@ function switchViewMode(mode) {
         pageViewBtn.classList.remove('active');
         daysContainer.classList.remove('page-mode');
         daysContainer.classList.add('single-page-mode');
+        
+        // 移除滑動提示元素
+        const existingHint = daysContainer.querySelector('.swipe-hint');
+        if (existingHint) {
+            daysContainer.removeChild(existingHint);
+        }
+        daysContainer.classList.remove('show-hint');
     } else {
         pageViewBtn.classList.add('active');
         singlePageBtn.classList.remove('active');
@@ -4251,6 +4307,26 @@ function switchViewMode(mode) {
         
         // 導航到當前天數
         navigateToDay(currentDayIndex);
+        
+        // 檢查是否為行動裝置，並且是首次切換到翻頁模式
+        if (window.innerWidth <= 991 && !localStorage.getItem('swipe_hint_shown')) {
+            // 添加滑動提示元素
+            const swipeHint = document.createElement('div');
+            swipeHint.className = 'swipe-hint';
+            daysContainer.appendChild(swipeHint);
+            daysContainer.classList.add('show-hint');
+            
+            // 標記已顯示提示
+            localStorage.setItem('swipe_hint_shown', 'true');
+            
+            // 自動移除提示
+            setTimeout(() => {
+                daysContainer.classList.remove('show-hint');
+                if (daysContainer.contains(swipeHint)) {
+                    daysContainer.removeChild(swipeHint);
+                }
+            }, 6000); // 6秒後移除
+        }
     }
     
     // 儲存用戶偏好的視圖模式
