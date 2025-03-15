@@ -235,18 +235,91 @@ function identifyLocation(latitude, longitude) {
 function initMap() {
     // 世界中心点坐标（默認顯示台灣）
     const worldCenter = [23.6978, 120.9605];
-    map = L.map('map').setView(worldCenter, 8);
     
-    // 使用OpenStreetMap作为底图
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
+    // 檢查地圖容器是否存在
+    const mapContainer = document.getElementById('map');
+    const mapLoading = document.getElementById('map-loading');
     
-    // 添加地圖點選功能
-    map.on('click', function(e) {
-        const latlng = e.latlng;
-        handleMapClick(latlng);
-    });
+    if (!mapContainer) {
+        console.error('找不到地圖容器元素');
+        return;
+    }
+    
+    // 顯示加載中狀態
+    if (mapLoading) {
+        mapLoading.style.display = 'flex';
+    }
+    
+    // 確保地圖容器有可見的高度和寬度
+    if (mapContainer.clientHeight === 0) {
+        console.log('地圖容器高度為0，嘗試設置預設高度');
+        mapContainer.style.height = '300px';
+    }
+    
+    try {
+        // 初始化地圖
+        map = L.map('map', {
+            zoomControl: true,
+            attributionControl: true,
+            scrollWheelZoom: true,
+            dragging: !L.Browser.mobile,
+            tap: !L.Browser.mobile
+        }).setView(worldCenter, 8);
+        
+        // 使用OpenStreetMap作为底图
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // 添加地圖點選功能
+        map.on('click', function(e) {
+            const latlng = e.latlng;
+            handleMapClick(latlng);
+        });
+        
+        // 在移動設備上啟用拖曳功能
+        if (L.Browser.mobile) {
+            map.dragging.enable();
+            map.tap.enable();
+            
+            // 延遲觸發重新調整大小事件以確保地圖正確渲染
+            setTimeout(() => {
+                map.invalidateSize();
+                console.log('移動設備：地圖大小重新調整');
+                
+                // 隱藏加載中狀態
+                if (mapLoading) {
+                    mapLoading.style.display = 'none';
+                }
+            }, 800);
+        } else {
+            // 非行動裝置上，地圖載入完成後隱藏加載狀態
+            setTimeout(() => {
+                if (mapLoading) {
+                    mapLoading.style.display = 'none';
+                }
+            }, 500);
+        }
+        
+        // 監聽地圖加載完成事件
+        map.on('load', function() {
+            console.log('地圖圖層完全加載');
+            if (mapLoading) {
+                mapLoading.style.display = 'none';
+            }
+        });
+        
+        console.log('地圖已成功初始化');
+    } catch (error) {
+        console.error('初始化地圖時發生錯誤:', error);
+        // 顯示錯誤消息
+        if (mapLoading) {
+            mapLoading.innerHTML = `
+                <i class="fas fa-exclamation-triangle" style="color: #e74c3c;"></i>
+                <div class="map-loading-text">地圖載入失敗，請重新整理頁面</div>
+            `;
+        }
+    }
 }
 
 // 初始化事件监听器
@@ -691,7 +764,7 @@ function distributeItineraryToDays() {
     let currentDayDuration = 0;
     let lastDayLastDestination = null; // 記錄前一天最後的景點
     let currentDayStartTime = null; // 當天的起始時間
-    let currentDayIndex = 0; // 當前是第幾天
+    let dayCounter = 0; // 當前是第幾天（改名，避免與全局變數 currentDayIndex 衝突）
     
     // 取得第一天的設定
     let currentDaySettings = getDaySettings(0);
@@ -742,7 +815,7 @@ function distributeItineraryToDays() {
         const totalTimeWithCurrentDestination = currentDayDuration + transportation.time + destination.stayDuration;
         
         // 檢查是否是當天的結束地點
-        const isEndPoint = checkDayEndPoint(currentDayIndex, destination);
+        const isEndPoint = checkDayEndPoint(dayCounter, destination);
         
         // 檢查是否是當天的最後一個景點
         const isLastDestination = 
@@ -751,7 +824,7 @@ function distributeItineraryToDays() {
             isEndPoint; // 使用新的判斷方法
         
         // 記錄時間計算結果，幫助調試
-        console.log(`景點 ${destination.name} - 當前天數: ${currentDayIndex+1}, 當前累積時間: ${currentDayDuration}, 交通時間: ${transportation.time}, 停留時間: ${destination.stayDuration}, 總計: ${totalTimeWithCurrentDestination}, 最大限制: ${currentDaySettings.maxHours}, 是否是結束地點: ${isEndPoint}, 是否是最後一個景點: ${isLastDestination}`);
+        console.log(`景點 ${destination.name} - 當前天數: ${dayCounter+1}, 當前累積時間: ${currentDayDuration}, 交通時間: ${transportation.time}, 停留時間: ${destination.stayDuration}, 總計: ${totalTimeWithCurrentDestination}, 最大限制: ${currentDaySettings.maxHours}, 是否是結束地點: ${isEndPoint}, 是否是最後一個景點: ${isLastDestination}`);
         
         // 如果是當天最後一個景點，暫時不計入停留時間
         const effectiveStayDuration = isLastDestination ? 0 : destination.stayDuration;
@@ -816,10 +889,10 @@ function distributeItineraryToDays() {
             
             // 進入下一天
             currentDay = [];
-            currentDayIndex++;
+            dayCounter++; // 更新變數名稱
             
             // 獲取下一天的設定
-            currentDaySettings = getDaySettings(currentDayIndex);
+            currentDaySettings = getDaySettings(dayCounter);
             
             // 下一天的起始時間
             currentDayStartTime = new Date();
@@ -1582,7 +1655,12 @@ function updateItinerary() {
     
     // 更新視圖模式相關元素
     if (viewMode === 'page') {
-        navigateToDay(Math.min(currentDayIndex, days.length - 1));
+        // 在切換到翻頁模式時，始終重置索引到第一頁
+        currentDayIndex = 0;
+        navigateToDay(0);
+        
+        // 輸出提示信息
+        console.log(`行程已更新: 共 ${days.length} 天，重置當前頁到第 1 天`);
     }
     
     // 更新行程統計
@@ -1769,6 +1847,24 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 檢查URL中是否包含經緯度參數
     parseLocationFromUrl();
+    
+    // 確保地圖在頁面加載完成後調整大小
+    if (map) {
+        setTimeout(() => {
+            map.invalidateSize();
+            console.log('頁面加載完成後重新調整地圖大小');
+        }, 1000);
+    }
+    
+    // 在視窗調整大小時更新地圖尺寸
+    window.addEventListener('resize', function() {
+        if (map) {
+            setTimeout(() => {
+                map.invalidateSize();
+                console.log('視窗大小變更，重新調整地圖大小');
+            }, 200);
+        }
+    });
 });
 
 // 根據交通方式和起訖點打開交通查詢網站
@@ -4207,22 +4303,31 @@ function initializeViewModeSelector() {
         switchViewMode('page');
     });
     
-    // 翻頁控制事件
+    // 翻頁控制事件 - 確保按鈕與滑動效果一致
     prevDayBtn.addEventListener('click', () => {
-        navigateToDay(currentDayIndex - 1);
+        // 上一頁按鈕，顯示前一天（頁碼減1）
+        if (currentDayIndex > 0) {
+            navigateToDay(currentDayIndex - 1);
+        }
     });
     
     nextDayBtn.addEventListener('click', () => {
-        navigateToDay(currentDayIndex + 1);
+        // 下一頁按鈕，顯示下一天（頁碼加1）
+        const totalDays = document.querySelectorAll('.day-card').length;
+        if (currentDayIndex < totalDays - 1) {
+            navigateToDay(currentDayIndex + 1);
+        }
     });
     
     // 監聽鍵盤方向鍵
     document.addEventListener('keydown', (e) => {
         if (viewMode !== 'page') return;
         
-        if (e.key === 'ArrowLeft' && !prevDayBtn.disabled) {
+        if (e.key === 'ArrowLeft' && currentDayIndex > 0) {
+            // 左箭頭鍵，顯示前一天
             navigateToDay(currentDayIndex - 1);
-        } else if (e.key === 'ArrowRight' && !nextDayBtn.disabled) {
+        } else if (e.key === 'ArrowRight' && currentDayIndex < document.querySelectorAll('.day-card').length - 1) {
+            // 右箭頭鍵，顯示下一天
             navigateToDay(currentDayIndex + 1);
         }
     });
@@ -4255,11 +4360,17 @@ function initializeViewModeSelector() {
             // 防止事件冒泡，避免觸發其他元素的點擊事件
             e.preventDefault();
             
-            if (touchDistanceX > 0 && !prevDayBtn.disabled) {
-                // 向右滑動，顯示上一天
+            // 以下邏輯對應電子書閱讀體驗：
+            // - 向右滑動（正值）= 上一頁 = 頁碼減1（顯示較早的天數）
+            // - 向左滑動（負值）= 下一頁 = 頁碼加1（顯示較晚的天數）
+            
+            if (touchDistanceX > 0) {
+                // 向右滑動，顯示上一天（索引-1）
+                console.log('向右滑動，顯示上一天');
                 navigateToDay(currentDayIndex - 1);
-            } else if (touchDistanceX < 0 && !nextDayBtn.disabled) {
-                // 向左滑動，顯示下一天
+            } else {
+                // 向左滑動，顯示下一天（索引+1）
+                console.log('向左滑動，顯示下一天');
                 navigateToDay(currentDayIndex + 1);
             }
             
@@ -4305,8 +4416,11 @@ function switchViewMode(mode) {
         daysContainer.classList.add('page-mode');
         daysContainer.classList.remove('single-page-mode');
         
-        // 導航到當前天數
-        navigateToDay(currentDayIndex);
+        // 在切換到頁面模式時，總是從第一頁開始
+        currentDayIndex = 0;
+        
+        // 導航到第一天
+        navigateToDay(0);
         
         // 檢查是否為行動裝置，並且是首次切換到翻頁模式
         if (window.innerWidth <= 991 && !localStorage.getItem('swipe_hint_shown')) {
@@ -4344,8 +4458,23 @@ function navigateToDay(dayIndex) {
     const currentDaySpan = document.getElementById('current-day');
     const totalDayCountSpan = document.getElementById('total-day-count');
     
-    // 驗證索引範圍
-    if (dayIndex < 0 || dayIndex >= totalDays) return;
+    // 如果沒有天數，不執行任何操作
+    if (totalDays === 0) {
+        console.log('沒有行程天數，無法導航');
+        return;
+    }
+    
+    // 強制將索引限制在有效範圍內
+    let safeIndex = Math.max(0, Math.min(dayIndex, totalDays - 1));
+    
+    // 如果索引被調整了，記錄警告
+    if (safeIndex !== dayIndex) {
+        console.warn(`索引超出範圍，原始索引: ${dayIndex}，調整為: ${safeIndex}`);
+        dayIndex = safeIndex;
+    }
+    
+    // 記錄切換前的索引
+    const prevIndex = currentDayIndex;
     
     // 更新當前天數索引
     currentDayIndex = dayIndex;
@@ -4358,21 +4487,34 @@ function navigateToDay(dayIndex) {
     prevDayBtn.disabled = currentDayIndex === 0;
     nextDayBtn.disabled = currentDayIndex === totalDays - 1;
     
+    // 計算移動方向 (1: 向後, -1: 向前, 0: 初始加載)
+    let direction = 0;
+    if (prevIndex !== null && prevIndex !== dayIndex) {
+        direction = dayIndex > prevIndex ? 1 : -1;
+    }
+    
     // 更新日程卡片顯示
     dayCards.forEach((card, index) => {
+        // 移除所有卡片的顯示狀態和動畫
         card.classList.remove('active-day', 'slide-in-next', 'slide-in-prev');
         
+        // 僅顯示當前索引的卡片
         if (index === currentDayIndex) {
             card.classList.add('active-day');
             
-            // 添加滑動動畫
-            if (index > 0 && prevDayBtn.disabled === false) {
-                card.classList.add('slide-in-prev');
-            } else if (index < totalDays - 1 && nextDayBtn.disabled === false) {
+            // 根據實際移動方向添加適當的動畫
+            if (direction === 1) {
+                // 前進方向
                 card.classList.add('slide-in-next');
+            } else if (direction === -1) {
+                // 後退方向
+                card.classList.add('slide-in-prev');
             }
         }
     });
+    
+    // 輸出調試信息
+    console.log(`切換到第 ${currentDayIndex + 1}/${totalDays} 天，移動方向: ${direction === 1 ? '前進' : direction === -1 ? '後退' : '初始化'}`);
     
     // 滾動到頂部
     window.scrollTo({
