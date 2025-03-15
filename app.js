@@ -953,16 +953,66 @@ function updateMap() {
     // 添加出发点标记
     addMarker(startingPoint.coordinates, startingPoint.name, 'green');
     
-    // 添加目的地标记
-    destinations.forEach((destination, index) => {
-        addMarker(destination.coordinates, `${index + 1}. ${destination.name}`, 'red');
-    });
-    
-    // 绘制路线
-    drawRoute();
+    // 根據當前顯示模式決定顯示哪些景點
+    if (currentViewMode === 'page') {
+        // 翻頁模式：只顯示當前頁的景點
+        const days = distributeItineraryToDays();
+        
+        // 確保當前日索引有效
+        if (currentDayIndex >= 0 && currentDayIndex < days.length) {
+            const currentDay = days[currentDayIndex];
+            console.log(`翻頁模式: 顯示第 ${currentDayIndex + 1} 天的 ${currentDay.length} 個景點`);
+            
+            // 找出當前天中的景點在全局 destinations 數組中的索引
+            const currentDayDestinations = currentDay.filter(dest => !dest.isStartingPoint);
+            
+            // 為當前天的景點添加標記
+            let markerIndex = 1; // 從1開始標記景點序號
+            currentDayDestinations.forEach(dayDest => {
+                // 查找此景點在全局 destinations 數組中的索引
+                const destIndex = destinations.findIndex(d => 
+                    d.name === dayDest.name && 
+                    d.coordinates[0] === dayDest.coordinates[0] && 
+                    d.coordinates[1] === dayDest.coordinates[1]
+                );
+                
+                if (destIndex !== -1) {
+                    addMarker(dayDest.coordinates, `${markerIndex}. ${dayDest.name}`, 'red');
+                    markerIndex++;
+                }
+            });
+            
+            // 繪製當前天的路線
+            drawDayRoute(currentDay);
+        }
+    } else {
+        // 一頁式模式：顯示所有景點
+        console.log(`一頁式模式: 顯示所有 ${destinations.length} 個景點`);
+        
+        // 添加目的地标记
+        destinations.forEach((destination, index) => {
+            addMarker(destination.coordinates, `${index + 1}. ${destination.name}`, 'red');
+        });
+        
+        // 绘制路线
+        drawRoute();
+    }
     
     // 调整地图视图以包含所有标记
     fitMapToMarkers();
+}
+
+// 繪製指定日期的路線
+function drawDayRoute(dayDestinations) {
+    if (!dayDestinations || dayDestinations.length <= 1) {
+        return;
+    }
+    
+    // 創建路徑點數組
+    const routePoints = dayDestinations.map(dest => dest.coordinates);
+    
+    // 繪製路線
+    polyline = L.polyline(routePoints, { color: 'blue', weight: 3 }).addTo(map);
 }
 
 // 清除地图上的标记和路线
@@ -4619,6 +4669,9 @@ function initViewModeToggle() {
         updatePagerControls();
         updateSummaryDays();
         
+        // 更新地圖，只顯示當前天的景點
+        updateMap();
+        
         // 震動反饋（如果支援）
         if (navigator.vibrate) {
             navigator.vibrate(50);
@@ -4643,6 +4696,9 @@ function initViewModeToggle() {
             card.classList.remove('active');
         });
         
+        // 更新地圖，顯示所有景點
+        updateMap();
+        
         // 震動反饋（如果支援）
         if (navigator.vibrate) {
             navigator.vibrate(50);
@@ -4657,8 +4713,12 @@ function initViewModeToggle() {
     
     // 讀取使用者偏好的顯示模式
     const savedViewMode = localStorage.getItem('viewMode');
-    if (savedViewMode === 'page') {
-        pageBtn.click();
+    if (savedViewMode) {
+        if (savedViewMode === 'page') {
+            pageBtn.click();
+        } else {
+            listBtn.click();
+        }
     }
 }
 
@@ -4770,12 +4830,12 @@ function showDayByIndex(index, direction = null) {
         updatePagerControls();
         updateSummaryDays();
         
-        // 震動反饋（如果支援）
-        if (navigator.vibrate) {
-            navigator.vibrate(30);
+        // 如果在翻頁模式下切換日期，也更新地圖顯示
+        if (currentViewMode === 'page') {
+            updateMap();
         }
     } catch (error) {
-        console.error('切換日期時發生錯誤:', error);
+        console.error('顯示指定日期時發生錯誤:', error);
     }
 }
 
@@ -4868,6 +4928,9 @@ function reinitViewMode() {
     } else {
         console.log('在列表模式下顯示所有天數');
     }
+    
+    // 更新地圖顯示，確保與當前視圖模式一致
+    updateMap();
 }
 
 // 清除現有行程並開始新規劃
