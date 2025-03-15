@@ -2,15 +2,22 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="旅遊規劃助手 - 輕鬆規劃您的旅遊行程，安排景點和交通方式">
+    <meta name="theme-color" content="#4a89dc">
     <title>旅遊規劃助手</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- 針對行動裝置的圖示 -->
+    <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/2161/2161423.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/2161/2161423.png">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>旅遊規劃助手</h1>
+            <div class="transport-note">輕鬆規劃您的旅遊行程</div>
         </header>
         
         <main>
@@ -19,7 +26,7 @@
                 <div class="starting-point">
                     <label for="starting-point">出發點：</label>
                     <input type="text" id="starting-point" placeholder="請輸入您的出發地點">
-                    <button id="set-starting-point">設定</button>
+                    <button id="set-starting-point"><i class="fas fa-map-marker-alt"></i> 設定</button>
                 </div>
                 
                 <div class="departure-time">
@@ -27,32 +34,32 @@
                     <input type="date" id="departure-date">
                     <label for="departure-time">出發時間：</label>
                     <input type="time" id="departure-time" value="09:00">
-                    <button id="set-departure-time">設定</button>
+                    <button id="set-departure-time"><i class="far fa-clock"></i> 設定</button>
                 </div>
                 
                 <div class="daily-hours">
                     <label for="max-daily-hours">每日行程時間：</label>
                     <input type="number" id="max-daily-hours" min="1" max="24" step="0.5" value="8">
                     <span>小時</span>
-                    <button id="set-daily-hours">設定</button>
+                    <button id="set-daily-hours"><i class="fas fa-check"></i> 設定</button>
                 </div>
                 
                 <div class="save-load-buttons">
-                    <button id="undo-button" title="復原上一步操作" disabled>↩️ 復原</button>
-                    <button id="redo-button" title="重做已復原的操作" disabled>↪️ 重做</button>
-                    <button id="save-itinerary">儲存行程</button>
-                    <button id="load-itinerary">讀取行程</button>
-                    <button id="manage-itinerary">管理行程</button>
-                    <button id="export-data">匯出資料</button>
-                    <button id="import-data">匯入資料</button>
-                    <button id="repair-data" title="修復或重置損壞的數據">🛠️ 修復數據</button>
+                    <button id="undo-button" title="復原上一步操作" disabled><i class="fas fa-undo"></i> 復原</button>
+                    <button id="redo-button" title="重做已復原的操作" disabled><i class="fas fa-redo"></i> 重做</button>
+                    <button id="save-itinerary"><i class="fas fa-save"></i> 儲存行程</button>
+                    <button id="load-itinerary"><i class="fas fa-folder-open"></i> 讀取行程</button>
+                    <button id="manage-itinerary"><i class="fas fa-cog"></i> 管理行程</button>
+                    <button id="export-data"><i class="fas fa-file-export"></i> 匯出資料</button>
+                    <button id="import-data"><i class="fas fa-file-import"></i> 匯入資料</button>
+                    <button id="repair-data" title="修復或重置損壞的數據"><i class="fas fa-tools"></i> 修復數據</button>
                 </div>
                 
                 <div class="add-destination">
                     <label for="new-destination">新增景點：</label>
                     <input type="text" id="new-destination" placeholder="請輸入景點名稱">
-                    <button id="add-destination">新增</button>
-                    <button id="set-coordinates-mode">使用經緯度</button>
+                    <button id="add-destination"><i class="fas fa-plus"></i> 新增</button>
+                    <button id="set-coordinates-mode"><i class="fas fa-map-pin"></i> 使用經緯度</button>
                 </div>
                 
                 <div id="coordinates-input-container" style="display: none;" class="coordinates-input">
@@ -67,18 +74,18 @@
                     </div>
                     <div class="coordinates-row">
                         <label for="latitude">緯度：</label>
-                        <input type="text" id="latitude" placeholder="-90 到 90">
+                        <input type="text" id="latitude" placeholder="-90 到 90" inputmode="decimal">
                     </div>
                     <div class="coordinates-row">
                         <label for="longitude">經度：</label>
-                        <input type="text" id="longitude" placeholder="-180 到 180">
+                        <input type="text" id="longitude" placeholder="-180 到 180" inputmode="decimal">
                     </div>
                     <div class="coordinates-row">
                         <label for="coordinates-name">位置名稱：</label>
                         <input type="text" id="coordinates-name" placeholder="請輸入位置名稱">
                     </div>
-                    <button id="set-coordinates">設定位置</button>
-                    <button id="manage-coordinates">管理已儲存位置</button>
+                    <button id="set-coordinates"><i class="fas fa-check"></i> 設定位置</button>
+                    <button id="manage-coordinates"><i class="fas fa-list"></i> 管理已儲存位置</button>
                 </div>
             </section>
             
@@ -96,12 +103,17 @@
         </main>
         
         <footer>
-            <p>旅遊規劃助手 &copy; 2023</p>
+            <p>旅遊規劃助手 &copy; <span id="current-year">2023</span></p>
+            <p class="footer-note">使用 Font Awesome 圖示與 Leaflet 地圖技術</p>
         </footer>
     </div>
     
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="transportationSystems.js"></script>
     <script src="app.js"></script>
+    <script>
+        // 自動更新頁腳年份
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+    </script>
 </body>
 </html>

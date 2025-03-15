@@ -8,18 +8,6 @@ let departureDate = null;
 let departureTime = "09:00";  // 默認出發時間為早上9點
 let maxDailyHours = 8;  // 每天的最大行程時間，預設為8小時
 
-// 用戶偏好設定與推薦系統相關變數
-let userPreferences = {
-    favoriteCategories: {},  // 景點分類偏好 {類型: 權重}
-    visitedLocations: {},    // 已訪問過的地點 {地點名: 次數}
-    preferredRegions: {},    // 偏好地區 {地區名: 權重}
-    avoidRepeats: true,      // 是否避免重複推薦
-    adventureLevel: 3        // 冒險程度 (1-5)，越高推薦越多新類型
-};
-
-// 儲存偏好設定的鍵名
-const USER_PREFERENCES_KEY = 'user_preferences';
-
 // 存儲每日特定的時間設置和結束地點
 let dailySettings = []; // 格式: [{dayIndex: 0, departureTime: "09:00", maxHours: 8}, ...]
 let dailyEndPoints = []; // 格式: [{dayIndex: 0, endPoint: {name, coordinates, stayDuration}}, ...]
@@ -264,10 +252,10 @@ function initMap() {
 // 初始化事件监听器
 function initEventListeners() {
     // 设置出发点
-    document.getElementById('set-starting-point').addEventListener('click', async () => {
-        const location = document.getElementById('starting-point').value.trim();
-        if (location) {
-            await setStartingPoint(location);
+    document.getElementById('set-starting-point').addEventListener('click', function() {
+        const startingPointInput = document.getElementById('starting-point').value.trim();
+        if (startingPointInput) {
+            setStartingPoint(startingPointInput);
         } else {
             alert('請輸入出發點！');
         }
@@ -463,24 +451,6 @@ function initEventListeners() {
             redoAction();
         }
     });
-    
-    // 新增景點推薦按鈕
-    const addDestinationContainer = document.querySelector('.add-destination');
-    
-    // 檢查是否已存在推薦按鈕，避免重複添加
-    if (!document.getElementById('recommend-attractions')) {
-        const recommendButton = document.createElement('button');
-        recommendButton.id = 'recommend-attractions';
-        recommendButton.className = 'recommend-button';
-        recommendButton.textContent = '智能推薦景點';
-        recommendButton.title = '根據您的偏好推薦適合的景點';
-        addDestinationContainer.appendChild(recommendButton);
-        
-        // 添加點擊事件
-        recommendButton.addEventListener('click', () => {
-            showRecommendationsDialog();
-        });
-    }
 }
 
 // 设置出发点
@@ -642,27 +612,15 @@ function determineStayDuration(location) {
 
 // 计算两点之间的距离（公里）
 function calculateDistance(coord1, coord2) {
-    // 使用 Haversine 公式計算兩點之間的距離
-    // coord1 與 coord2 為 [緯度, 經度] 格式
-    const R = 6371; // 地球半徑（公里）
-    
-    // 將經緯度轉換為弧度
-    const lat1 = coord1[0] * Math.PI / 180;
-    const lon1 = coord1[1] * Math.PI / 180;
-    const lat2 = coord2[0] * Math.PI / 180;
-    const lon2 = coord2[1] * Math.PI / 180;
-    
-    // Haversine 公式計算
-    const dLat = lat2 - lat1;
-    const dLon = lon2 - lon1;
+    // 使用Haversine公式计算两点之间的距离
+    const R = 6371; // 地球半径（公里）
+    const dLat = (coord2[0] - coord1[0]) * Math.PI / 180;
+    const dLon = (coord2[1] - coord1[1]) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1) * Math.cos(lat2) * 
+              Math.cos(coord1[0] * Math.PI / 180) * Math.cos(coord2[0] * Math.PI / 180) * 
               Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c;
-    
-    // 返回距離（公里），並保留小數點後兩位
-    return Math.round(distance * 100) / 100;
+    return R * c;
 }
 
 // 确定两点之间的最佳交通方式
@@ -1305,134 +1263,106 @@ function updateItinerary() {
     daysContainer.innerHTML = '';
     
     if (!startingPoint) {
-        daysContainer.innerHTML = '<p>請先設置出發點</p>';
+        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/5578/5578703.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請先設置出發點</p></div>';
         return;
     }
     
     if (destinations.length === 0) {
-        daysContainer.innerHTML = '<p>請添加景點</p>';
+        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/1041/1041728.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請添加景點</p></div>';
         return;
     }
     
     // 分配行程到多天
     const days = distributeItineraryToDays();
     
+    // 獲取當前日期，用於計算行程日期
+    const today = new Date();
+    const departureDate = document.getElementById('departure-date')?.value;
+    let tripStartDate;
+    
+    if (departureDate) {
+        tripStartDate = new Date(departureDate);
+    } else {
+        tripStartDate = new Date();
+    }
+    
     // 创建每天的行程卡片
     days.forEach((day, dayIndex) => {
+        // 計算當前行程日期
+        const currentDate = new Date(tripStartDate);
+        currentDate.setDate(tripStartDate.getDate() + dayIndex);
+        const formattedDate = formatDateWithLunar(currentDate);
+        
         const dayCard = document.createElement('div');
         dayCard.className = 'day-card';
         dayCard.dataset.dayIndex = dayIndex;
+        
+        // 設置卡片的基本樣式
+        if (dayIndex % 2 === 0) {
+            dayCard.style.backgroundColor = '#f9f9f9';
+        } else {
+            dayCard.style.backgroundColor = '#ffffff';
+        }
         
         // 獲取當天的設定
         const daySetting = dailySettings.find(setting => setting.dayIndex === dayIndex);
         const departureTimeValue = daySetting ? daySetting.departureTime : departureTime;
         const maxHoursValue = daySetting ? daySetting.maxHours : maxDailyHours;
         
-        // 創建天數標題和設置
-        const dayTitle = document.createElement('div');
-        dayTitle.className = 'day-title';
-        
-        // 計算日期（如果有設定出發日期）
-        let dateDisplay = '';
-        if (departureDate) {
-            const startDate = new Date(departureDate);
-            startDate.setDate(startDate.getDate() + dayIndex);
-            
-            const year = startDate.getFullYear();
-            const month = startDate.getMonth() + 1;
-            const day = startDate.getDate();
-            const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-            const weekDay = weekDays[startDate.getDay()];
-            
-            dateDisplay = ` (${year}年${month}月${day}日 週${weekDay})`;
-        }
-        
-        dayTitle.innerHTML = `
-            <div class="day-header">
-                <span>第 ${dayIndex + 1} 天${dateDisplay}</span>
-                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">在此日添加景點</button>
-            </div>
-            <div class="day-settings">
-                <span>出發時間: ${departureTimeValue}</span>
-                <span>行程時間上限: ${maxHoursValue} 小時</span>
-                <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">設定</button>
-            </div>
-            <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">建議行程順序</button>
-        `;
-        dayCard.appendChild(dayTitle);
-        
-        // 計算當天已安排的總時間
-        let totalPlannedTime = 0;
-        let transportationTime = 0;
-        let stayTime = 0;
-        
-        // 遍歷當天所有行程點計算時間
-        day.forEach((point, pointIndex) => {
-            if (pointIndex > 0) { // 跳過起點
-                // 累計交通時間
-                if (point.transportationFromPrevious) {
-                    transportationTime += point.transportationFromPrevious.time;
-                    totalPlannedTime += point.transportationFromPrevious.time;
-                }
-                
-                // 累計停留時間
-                if (!point.isEndPoint && point.hasOwnProperty('effectiveStayDuration')) {
-                    stayTime += point.effectiveStayDuration;
-                    totalPlannedTime += point.effectiveStayDuration;
+        // 計算當天已安排的時間
+        let scheduledHours = 0;
+        day.forEach((point, index) => {
+            if (index > 0) { // 跳過起點
+                scheduledHours += point.transportationFromPrevious.time;
+                if (!point.isEndPoint) {
+                    scheduledHours += point.stayDuration;
                 }
             }
         });
         
-        // 計算時間使用比例
-        const timePercentage = Math.min(100, (totalPlannedTime / maxHoursValue) * 100);
-        const isExceeded = totalPlannedTime > maxHoursValue;
+        // 計算剩餘時間
+        const remainingHours = Math.max(0, maxHoursValue - scheduledHours);
+        const scheduledPercentage = Math.min(100, (scheduledHours / maxHoursValue) * 100);
         
-        // 根據時間使用比例選擇不同的顯示文字
-        let statusText = '充裕';
-        let statusClass = 'normal';
-        
-        if (timePercentage >= 95) {
-            statusText = '已滿';
-            statusClass = 'full';
-        } else if (timePercentage >= 85) {
-            statusText = '接近滿';
-            statusClass = 'almost-full';
-        } else if (timePercentage >= 70) {
-            statusText = '尚有餘裕';
-            statusClass = 'moderate';
-        } else if (timePercentage >= 50) {
-            statusText = '適中';
-            statusClass = 'comfortable';
-        }
-        
-        if (isExceeded) {
-            statusText = '超出上限';
-            statusClass = 'exceeded';
-        }
-        
-        // 創建狀態條容器
-        const progressContainer = document.createElement('div');
-        progressContainer.className = 'day-progress-container';
-        progressContainer.innerHTML = `
-            <div class="day-progress-info">
-                <span class="day-progress-label">時間安排狀態：<span class="status-text ${statusClass}">${statusText}</span></span>
-                <span>${Math.round(totalPlannedTime * 10) / 10} / ${maxHoursValue} 小時 ${isExceeded ? '(超出上限)' : ''}</span>
-            </div>
-            <div class="day-progress-bar">
-                <div class="day-progress-fill ${isExceeded ? 'exceeded' : ''}" style="width: ${timePercentage}%">
-                    <span class="day-progress-tooltip">已安排 ${Math.round(totalPlannedTime * 10) / 10} 小時（${Math.round(timePercentage)}%）</span>
+        // 创建天数标题和设置
+        const dayTitle = document.createElement('div');
+        dayTitle.className = 'day-title';
+        dayTitle.innerHTML = `
+            <div class="day-header">
+                <div>
+                    <h3 style="margin: 0; color: #4a89dc;">第 ${dayIndex + 1} 天</h3>
+                    <div style="font-size: 14px; color: #666; margin-top: 5px;">${formattedDate}</div>
                 </div>
-                <div class="day-progress-markers">
-                    ${createTimeMarkers(maxHoursValue)}
+                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">
+                    <i class="fas fa-plus"></i> 在此日添加景點
+                </button>
+            </div>
+            <div class="day-info" style="display: flex; justify-content: space-between; margin: 15px 0;">
+                <div class="day-settings">
+                    <div style="margin-bottom: 5px;">
+                        <i class="far fa-clock"></i> 出發時間: <strong>${departureTimeValue}</strong>
+                    </div>
+                    <div>
+                        <i class="fas fa-hourglass-half"></i> 行程時間: <strong>${maxHoursValue}</strong> 小時 
+                        <span style="font-size: 12px; color: #666;">(已安排: ${scheduledHours.toFixed(1)} 小時)</span>
+                    </div>
+                </div>
+                <div>
+                    <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">
+                        <i class="fas fa-cog"></i> 設定
+                    </button>
                 </div>
             </div>
-            <div class="day-progress-detail">
-                <span>交通時間：${Math.round(transportationTime * 10) / 10} 小時</span>
-                <span>停留時間：${Math.round(stayTime * 10) / 10} 小時</span>
-                <span>${isExceeded ? '超出時間' : '剩餘時間'}：${Math.abs(Math.round((maxHoursValue - totalPlannedTime) * 10) / 10)} 小時</span>
+            <div class="time-progress" style="height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-bottom: 15px;">
+                <div style="height: 100%; width: ${scheduledPercentage}%; background-color: ${scheduledPercentage > 90 ? '#e74c3c' : '#4CAF50'}; border-radius: 3px;"></div>
+            </div>
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                <button class="optimize-day-button" onclick="optimizeDayItinerary(${dayIndex})">
+                    <i class="fas fa-route"></i> 建議行程順序
+                </button>
             </div>
         `;
-        dayCard.appendChild(progressContainer);
+        dayCard.appendChild(dayTitle);
         
         // 添加每个目的地
         day.forEach((point, pointIndex) => {
@@ -1444,9 +1374,12 @@ function updateItinerary() {
                 startingPointItem.dataset.isStartingPoint = 'true';
                 startingPointItem.innerHTML = `
                     <div class="destination-info">
-                        <div class="destination-name">出發點: ${point.name}</div>
+                        <div class="destination-name">
+                            <i class="fas fa-map-marker-alt" style="color: #4CAF50;"></i> 出發點: ${point.name}
+                        </div>
                         <div class="destination-details">
-                            <div>出發時間: ${point.arrivalTime}</div>
+                            <div><i class="far fa-clock"></i> 出發時間: ${point.arrivalTime}</div>
+                            ${point.country ? `<div style="font-size: 12px; color: #666;"><i class="fas fa-globe-asia"></i> ${point.country} ${point.city || ''}</div>` : ''}
                         </div>
                     </div>
                 `;
@@ -1507,12 +1440,12 @@ function updateItinerary() {
                         // 獲取起訖點的國家和城市信息
                         if (day[pointIndex - 1].country) {
                             fromCountry = day[pointIndex - 1].country;
-                            fromCity = day[pointIndex - 1].city || '默認';
+                            fromCity = day[pointIndex - 1].city || '';
                         }
                         
                         if (point.country) {
                             toCountry = point.country;
-                            toCity = point.city || '默認';
+                            toCity = point.city || '';
                         }
                     }
                     
@@ -1527,14 +1460,29 @@ function updateItinerary() {
                     // 將標準交通方式映射到當地交通方式名稱
                     const localTransportMode = modeMapping[point.transportationFromPrevious.mode] || point.transportationFromPrevious.mode;
                     
+                    // 轉換分鐘為小時和分鐘格式
+                    const totalMinutes = Math.round(point.transportationFromPrevious.time * 60);
+                    const hours = Math.floor(totalMinutes / 60);
+                    const minutes = totalMinutes % 60;
+                    let timeDisplay = '';
+                    
+                    if (hours > 0) {
+                        timeDisplay += `${hours} 小時 `;
+                    }
+                    if (minutes > 0 || hours === 0) {
+                        timeDisplay += `${minutes} 分鐘`;
+                    }
+                    
                     transportationItem.innerHTML = `
                         <div class="transportation-icon">${transportIcon}</div>
-                        <div>
+                        <div class="transportation-info">
                             <div>交通方式: ${point.transportationFromPrevious.mode}</div>
-                            <div>預計時間: ${Math.round(point.transportationFromPrevious.time * 60)} 分鐘</div>
+                            <div>預計時間: ${timeDisplay}</div>
                         </div>
                         <div class="transportation-actions">
-                            <button onclick="openScheduleQuery('${point.transportationFromPrevious.mode}', '${fromLocation}', '${toLocation}')" title="查詢交通路線">🔍 交通查詢</button>
+                            <button onclick="openScheduleQuery('${point.transportationFromPrevious.mode}', '${fromLocation}', '${toLocation}')" title="查詢交通路線">
+                                <i class="fas fa-search"></i> 交通查詢
+                            </button>
                         </div>
                     `;
                     
@@ -1742,23 +1690,16 @@ function handleCoordinatesInput(lat, lng, locationName) {
 }
 
 // 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', function() {
     // 初始化地图
     initMap();
     
-    // 初始化事件監聽器
+    // 初始化事件监听器
     initEventListeners();
     
     // 禁用添加景点功能，直到设置出发点
     document.getElementById('new-destination').disabled = true;
     document.getElementById('add-destination').disabled = true;
-    
-    // 載入用戶偏好設定
-    const savedPreferences = localStorage.getItem(USER_PREFERENCES_KEY);
-    if (savedPreferences) {
-        userPreferences = JSON.parse(savedPreferences);
-        console.log('已載入用戶偏好設定:', userPreferences);
-    }
     
     // 讀取位置緩存
     const savedLocationCache = localStorage.getItem(LOCATION_CACHE_KEY);
@@ -1842,6 +1783,7 @@ let touchDraggedItem = null;
 let touchStartX = 0;
 let touchStartY = 0;
 let isTouchMoving = false;
+let longPressTimer = null;
 
 // 拖曳事件處理函數
 function handleDragStart(e) {
@@ -3625,23 +3567,53 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
     dialogContent.style.cssText = `
         background: white;
         padding: 20px;
-        border-radius: 5px;
+        border-radius: 8px;
         max-width: 800px;
         width: 90%;
         max-height: 80vh;
         overflow-y: auto;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     `;
     
+    // 取得當前日期的農曆資訊（若有農曆功能）
+    let lunarDateInfo = '';
+    if (typeof getLunarDate === 'function') {
+        try {
+            const today = new Date();
+            lunarDateInfo = `<span class="lunar-date">${getLunarDate(today)}</span>`;
+        } catch (e) {
+            console.log('無法獲取農曆日期');
+        }
+    }
+    
     dialogContent.innerHTML = `
-        <h3>調整第 ${dayIndex + 1} 天的景點停留時間</h3>
-        <p>您想添加的景點「${newDestination.name}」需要 ${newDestination.stayDuration.toFixed(1)} 小時停留時間和約 ${calculateDayTimeWithNewDestination(dayIndex, newDestination).transportationTime.toFixed(1)} 小時交通時間。</p>
-        <p>需要減少總計 <strong>${targetReduction.toFixed(1)} 小時</strong> 才能符合當天時間限制。</p>
-        <p>請調整以下景點的停留時間：</p>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-            <tr>
-                <th style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">景點</th>
-                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">當前停留時間 (小時)</th>
-                <th style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">新停留時間 (小時)</th>
+        <h3 style="color: #4a89dc; margin-bottom: 15px; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px;">
+            調整第 ${dayIndex + 1} 天的景點時間 ${lunarDateInfo}
+        </h3>
+        <div style="background-color: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+            <p style="margin-bottom: 8px;">您想添加的景點「<strong style="color: #e74c3c;">${newDestination.name}</strong>」資訊：</p>
+            <ul style="margin-left: 20px; margin-bottom: 8px;">
+                <li>建議停留時間：<strong>${newDestination.stayDuration.toFixed(1)}</strong> 小時</li>
+                <li>預計交通時間：<strong>${calculateDayTimeWithNewDestination(dayIndex, newDestination).transportationTime.toFixed(1)}</strong> 小時</li>
+            </ul>
+            <p style="color: #e74c3c; font-weight: bold;">需要減少總計 ${targetReduction.toFixed(1)} 小時才能符合當天時間限制。</p>
+        </div>
+        
+        <div style="margin-bottom: 10px;">
+            <p style="font-weight: bold; margin-bottom: 5px;">調整選項：</p>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button id="distribute-equally" style="padding: 5px 10px; background-color: #4a89dc; color: white; border: none; border-radius: 4px; cursor: pointer;">平均分配減少時間</button>
+                <button id="reduce-proportionally" style="padding: 5px 10px; background-color: #4a89dc; color: white; border: none; border-radius: 4px; cursor: pointer;">按比例減少時間</button>
+                <button id="reset-adjustments" style="padding: 5px 10px; background-color: #f0ad4e; color: white; border: none; border-radius: 4px; cursor: pointer;">重設調整</button>
+            </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #ddd;">
+            <tr style="background-color: #f5f7fa;">
+                <th style="text-align: left; padding: 10px; border-bottom: 1px solid #ddd;">景點名稱</th>
+                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">原始停留時間</th>
+                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">調整後時間</th>
+                <th style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">減少時間</th>
             </tr>
             ${day.map((point, index) => {
                 if (point.isStartingPoint || point.isEndPoint) return '';
@@ -3651,27 +3623,53 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
                     Math.abs(d.coordinates[1] - point.coordinates[1]) < 0.0000001
                 );
                 if (destinationIndex < 0) return '';
+                
+                // 計算初始建議的減少時間
+                const suggestedNewTime = Math.max(0, point.stayDuration - targetReduction / (day.length - 1)).toFixed(1);
+                const reductionTime = (point.stayDuration - suggestedNewTime).toFixed(1);
+                
                 return `
-                    <tr>
-                        <td style="padding: 8px; border-bottom: 1px solid #ddd;">${point.name}</td>
-                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">${point.stayDuration.toFixed(1)}</td>
-                        <td style="text-align: center; padding: 8px; border-bottom: 1px solid #ddd;">
-                            <input type="number" min="0" max="${point.stayDuration}" step="0.1" value="${Math.max(0, point.stayDuration - targetReduction / (day.length - 1)).toFixed(1)}" 
-                                data-index="${destinationIndex}" class="time-adjustment-input" style="width: 70px;">
+                    <tr class="destination-row" data-original="${point.stayDuration.toFixed(1)}">
+                        <td style="padding: 10px; border-bottom: 1px solid #ddd;">
+                            <span>${point.name}</span>
+                            <div style="font-size: 12px; color: #666;">
+                                <span class="location-type">${getLocationType(point.name)}</span>
+                            </div>
+                        </td>
+                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">
+                            ${point.stayDuration.toFixed(1)} 小時
+                        </td>
+                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;">
+                            <input type="number" min="0" max="${point.stayDuration}" step="0.1" value="${suggestedNewTime}" 
+                                data-index="${destinationIndex}" data-original="${point.stayDuration.toFixed(1)}" class="time-adjustment-input" style="width: 70px; padding: 5px; text-align: center; border: 1px solid #ddd; border-radius: 4px;">
+                            <span> 小時</span>
+                        </td>
+                        <td style="text-align: center; padding: 10px; border-bottom: 1px solid #ddd;" class="reduction-display">
+                            ${reductionTime} 小時
                         </td>
                     </tr>
                 `;
             }).join('')}
+            <tr style="background-color: #edf2f7; font-weight: bold;">
+                <td colspan="2" style="text-align: right; padding: 10px;">總計減少時間：</td>
+                <td colspan="2" style="text-align: center; padding: 10px;">
+                    <span id="total-reduction">0.0</span> / <span id="target-reduction">${targetReduction.toFixed(1)}</span> 小時
+                    <div style="width: 100%; height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-top: 5px; overflow: hidden;">
+                        <div id="reduction-progress" style="height: 100%; width: 0%; background-color: #4CAF50;"></div>
+                    </div>
+                </td>
+            </tr>
         </table>
-        <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
             <div>
-                <span>剩餘需減少時間：</span>
-                <span id="remaining-reduction">${targetReduction.toFixed(1)}</span>
+                <span style="font-weight: bold;">還需減少時間：</span>
+                <span id="remaining-reduction" style="color: #e74c3c; font-weight: bold;">${targetReduction.toFixed(1)}</span>
                 <span> 小時</span>
             </div>
             <div>
-                <button id="apply-time-adjustments" style="background-color: #4CAF50; color: white; margin-right: 10px;">應用調整</button>
-                <button id="cancel-time-adjustments">取消</button>
+                <button id="apply-time-adjustments" style="background-color: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 4px; margin-right: 10px; cursor: pointer;">確認調整</button>
+                <button id="cancel-time-adjustments" style="background-color: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">取消</button>
             </div>
         </div>
     `;
@@ -3682,78 +3680,243 @@ function showDayTimeAdjustmentDialog(dayIndex, day, targetReduction, newDestinat
     // 計算剩餘需減少的時間
     let remainingReduction = targetReduction;
     const timeInputs = dialogContent.querySelectorAll('.time-adjustment-input');
+    const totalReductionDisplay = document.getElementById('total-reduction');
+    const remainingReductionDisplay = document.getElementById('remaining-reduction');
+    const reductionProgress = document.getElementById('reduction-progress');
     
-    timeInputs.forEach(input => {
-        input.addEventListener('input', () => {
-            let totalReduction = 0;
-            timeInputs.forEach(inp => {
-                const destIndex = parseInt(inp.dataset.index);
-                const originalTime = destinations[destIndex].stayDuration;
-                const newTime = parseFloat(inp.value) || 0;
-                totalReduction += Math.max(0, originalTime - newTime);
-            });
+    // 更新減少時間顯示
+    function updateReductionDisplay() {
+        let totalReduction = 0;
+        
+        timeInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            const newTime = parseFloat(input.value);
+            const reduction = Math.max(0, originalTime - newTime);
             
-            const remainingElement = document.getElementById('remaining-reduction');
-            remainingReduction = targetReduction - totalReduction;
-            remainingElement.textContent = remainingReduction.toFixed(1);
-            remainingElement.style.color = remainingReduction <= 0 ? 'green' : 'red';
+            const row = input.closest('.destination-row');
+            const reductionDisplay = row.querySelector('.reduction-display');
+            reductionDisplay.textContent = reduction.toFixed(1) + ' 小時';
+            
+            // 根據調整幅度變更顏色
+            if (reduction > 0) {
+                reductionDisplay.style.color = '#e74c3c';
+            } else {
+                reductionDisplay.style.color = '#666';
+            }
+            
+            totalReduction += reduction;
         });
+        
+        remainingReduction = Math.max(0, targetReduction - totalReduction);
+        
+        totalReductionDisplay.textContent = totalReduction.toFixed(1);
+        remainingReductionDisplay.textContent = remainingReduction.toFixed(1);
+        
+        // 更新進度條
+        const progressPercentage = Math.min(100, (totalReduction / targetReduction) * 100);
+        reductionProgress.style.width = progressPercentage + '%';
+        
+        // 調整進度條顏色
+        if (progressPercentage < 100) {
+            reductionProgress.style.backgroundColor = '#f0ad4e';
+        } else {
+            reductionProgress.style.backgroundColor = '#4CAF50';
+        }
+        
+        // 啟用或禁用應用按鈕
+        const applyButton = document.getElementById('apply-time-adjustments');
+        if (totalReduction >= targetReduction) {
+            applyButton.removeAttribute('disabled');
+            applyButton.style.opacity = '1';
+        } else {
+            applyButton.setAttribute('disabled', 'true');
+            applyButton.style.opacity = '0.5';
+        }
+    }
+    
+    // 初始計算
+    setTimeout(updateReductionDisplay, 100);
+    
+    // 平均分配減少時間
+    document.getElementById('distribute-equally').addEventListener('click', () => {
+        const adjustableInputs = Array.from(timeInputs);
+        const adjustableCount = adjustableInputs.length;
+        
+        if (adjustableCount === 0) return;
+        
+        const reductionPerDestination = targetReduction / adjustableCount;
+        
+        adjustableInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            const newTime = Math.max(0, originalTime - reductionPerDestination).toFixed(1);
+            input.value = newTime;
+        });
+        
+        updateReductionDisplay();
+    });
+    
+    // 按比例減少時間
+    document.getElementById('reduce-proportionally').addEventListener('click', () => {
+        const adjustableInputs = Array.from(timeInputs);
+        
+        // 計算總原始時間
+        let totalOriginalTime = 0;
+        adjustableInputs.forEach(input => {
+            totalOriginalTime += parseFloat(input.dataset.original);
+        });
+        
+        if (totalOriginalTime === 0) return;
+        
+        // 按比例減少
+        adjustableInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            const proportion = originalTime / totalOriginalTime;
+            const reduction = targetReduction * proportion;
+            const newTime = Math.max(0, originalTime - reduction).toFixed(1);
+            input.value = newTime;
+        });
+        
+        updateReductionDisplay();
+    });
+    
+    // 重設調整
+    document.getElementById('reset-adjustments').addEventListener('click', () => {
+        timeInputs.forEach(input => {
+            const originalTime = parseFloat(input.dataset.original);
+            input.value = originalTime.toFixed(1);
+        });
+        
+        updateReductionDisplay();
+    });
+    
+    // 綁定輸入事件
+    timeInputs.forEach(input => {
+        input.addEventListener('input', updateReductionDisplay);
     });
     
     // 應用按鈕事件
     document.getElementById('apply-time-adjustments').addEventListener('click', () => {
-        if (remainingReduction > 0) {
-            if (!confirm('尚未完全減少所需時間。是否仍要應用這些調整並增加當天的時間限制？')) {
-                return;
-            }
-            
-            // 增加當天時間限制
-            const daySetting = getDaySettings(dayIndex);
-            const newMaxHours = daySetting.maxHours + remainingReduction;
-            
-            const existingSettingIndex = dailySettings.findIndex(s => s.dayIndex === dayIndex);
-            if (existingSettingIndex >= 0) {
-                dailySettings[existingSettingIndex].maxHours = newMaxHours;
-            } else {
-                dailySettings.push({
-                    dayIndex: dayIndex,
-                    departureTime: daySetting.departureHours + ":" + (daySetting.departureMinutes < 10 ? "0" : "") + daySetting.departureMinutes,
-                    maxHours: newMaxHours
-                });
-            }
-            
-            alert(`已將第 ${dayIndex + 1} 天的行程時間限制調整為 ${newMaxHours.toFixed(1)} 小時。`);
-        }
+        // 檢查是否已滿足減少要求
+        let totalReduction = 0;
         
-        // 應用所有調整
         timeInputs.forEach(input => {
-            const destIndex = parseInt(input.dataset.index);
-            const newTime = parseFloat(input.value) || 0;
-            if (!isNaN(destIndex) && destIndex >= 0 && destIndex < destinations.length) {
-                destinations[destIndex].stayDuration = newTime;
-            }
+            const originalTime = parseFloat(input.dataset.original);
+            const newTime = parseFloat(input.value);
+            totalReduction += Math.max(0, originalTime - newTime);
         });
         
-        // 添加新景點
-        destinations.push(newDestination);
+        if (totalReduction < targetReduction) {
+            alert(`請至少減少 ${targetReduction.toFixed(1)} 小時的停留時間。目前只減少了 ${totalReduction.toFixed(1)} 小時。`);
+            return;
+        }
         
-        // 更新界面
-        updateMap();
-        updateItinerary();
-        
-        // 保存狀態
-        saveStateToHistory();
+        // 應用調整
+        timeInputs.forEach(input => {
+            const destinationIndex = parseInt(input.dataset.index);
+            const newTime = parseFloat(input.value);
+            
+            if (!isNaN(destinationIndex) && destinationIndex >= 0 && destinationIndex < destinations.length) {
+                destinations[destinationIndex].stayDuration = newTime;
+            }
+        });
         
         // 關閉對話框
         document.body.removeChild(dialog);
         
-        alert(`已成功添加景點「${newDestination.name}」到第 ${dayIndex + 1} 天的行程中。`);
+        // 更新地圖和行程
+        updateMap();
+        updateItinerary();
+        
+        // 保存當前狀態
+        saveStateToHistory();
+        
+        // 添加新景點
+        destinations.push(newDestination);
+        updateMap();
+        updateItinerary();
+        
+        alert(`已成功調整行程時間並添加景點「${newDestination.name}」到第 ${dayIndex + 1} 天。`);
     });
     
     // 取消按鈕事件
     document.getElementById('cancel-time-adjustments').addEventListener('click', () => {
         document.body.removeChild(dialog);
     });
+}
+
+// 獲取景點類型（用於顯示更多資訊）
+function getLocationType(locationName) {
+    // 根據關鍵字判斷景點類型
+    const types = {
+        '國家公園': '自然景觀',
+        '森林': '自然景觀',
+        '山': '自然景觀',
+        '溫泉': '休閒',
+        '公園': '休閒',
+        '海灘': '海岸景觀',
+        '海': '海岸景觀',
+        '港': '海岸景觀',
+        '廟': '宗教古蹟',
+        '寺': '宗教古蹟',
+        '古蹟': '歷史古蹟',
+        '博物館': '文化展覽',
+        '美術館': '文化展覽',
+        '展覽': '文化展覽',
+        '夜市': '美食購物',
+        '老街': '美食購物',
+        '市場': '美食購物',
+        '商圈': '美食購物',
+        '百貨': '美食購物',
+        '餐廳': '美食',
+        '咖啡': '美食',
+        '遊樂園': '主題樂園',
+        '動物園': '主題樂園',
+        '車站': '交通樞紐',
+        '捷運': '交通樞紐',
+        '機場': '交通樞紐'
+    };
+    
+    // 預設類型
+    let locationType = '一般景點';
+    
+    // 針對常見台灣景點特別處理
+    const specialLocations = {
+        '日月潭': '自然景觀',
+        '阿里山': '自然景觀',
+        '太魯閣': '自然景觀',
+        '墾丁': '海岸景觀',
+        '台北101': '都市景觀',
+        '九份': '歷史老街',
+        '淡水': '海岸景觀',
+        '故宮博物院': '文化展覽',
+        '西門町': '美食購物',
+        '高雄85大樓': '都市景觀',
+        '花蓮七星潭': '海岸景觀',
+        '陽明山': '自然景觀',
+        '三峽老街': '歷史老街',
+        '鶯歌陶瓷': '文化體驗',
+        '野柳': '自然景觀',
+        '平溪': '歷史老街',
+        '十分': '歷史老街'
+    };
+    
+    // 檢查是否為特殊景點
+    for (const [key, type] of Object.entries(specialLocations)) {
+        if (locationName.includes(key)) {
+            locationType = type;
+            return locationType;
+        }
+    }
+    
+    // 如果不是特殊景點，根據關鍵字判斷
+    for (const [keyword, type] of Object.entries(types)) {
+        if (locationName.includes(keyword)) {
+            locationType = type;
+            return locationType;
+        }
+    }
+    
+    return locationType;
 }
 
 // 顯示添加景點到特定日期的對話框
@@ -3843,898 +4006,141 @@ function showAddToSpecificDayDialog(dayIndex) {
     });
 }
 
-// 景點類別對應表 - 用於推薦系統分析
-const ATTRACTION_CATEGORIES = {
-    '自然景觀': ['公園', '山', '湖', '海灘', '瀑布', '步道', '森林', '峽谷', '洞穴', '島嶼', '沙漠', '火山', '冰川', '溫泉區', '自然保護區', '國家公園'],
-    '文化歷史': ['博物館', '美術館', '寺廟', '古蹟', '展覽館', '歷史街區', '教堂', '宮殿', '城堡'],
-    '娛樂休閒': ['夜市', '購物中心', '遊樂園', '動物園', '水族館', '植物園', '主題公園', '水上樂園', '電影院', '劇院', '音樂廳', '夜店'],
-    '美食購物': ['餐廳', '咖啡廳', '市場', '廣場'],
-    '運動戶外': ['滑雪場', '衝浪點', '潛水點', '釣魚點', '露營地', '野餐區', '觀鳥區', '高爾夫球場', '運動場', '體育館'],
-    '特色體驗': ['溫泉', '酒莊', '農場', '牧場', '果園', '纜車', '天文台', '觀景台', '燈塔', '碼頭']
+// 農曆日期轉換功能
+// 農曆日期資料（2021-2025年）
+const LUNAR_INFO = {
+    '2023': {
+        '正月': { firstDay: new Date(2023, 0, 22), days: 29 },
+        '二月': { firstDay: new Date(2023, 1, 20), days: 30 },
+        '三月': { firstDay: new Date(2023, 2, 22), days: 29 },
+        '四月': { firstDay: new Date(2023, 3, 20), days: 30 },
+        '五月': { firstDay: new Date(2023, 4, 20), days: 29 },
+        '六月': { firstDay: new Date(2023, 5, 18), days: 30 },
+        '七月': { firstDay: new Date(2023, 6, 18), days: 29 },
+        '八月': { firstDay: new Date(2023, 7, 16), days: 30 },
+        '九月': { firstDay: new Date(2023, 8, 15), days: 29 },
+        '十月': { firstDay: new Date(2023, 9, 14), days: 30 },
+        '十一月': { firstDay: new Date(2023, 10, 13), days: 29 },
+        '十二月': { firstDay: new Date(2023, 11, 12), days: 30 }
+    },
+    '2024': {
+        '正月': { firstDay: new Date(2024, 0, 11), days: 30 },
+        '二月': { firstDay: new Date(2024, 1, 10), days: 29 },
+        '閏二月': { firstDay: new Date(2024, 2, 10), days: 30 },
+        '三月': { firstDay: new Date(2024, 3, 9), days: 29 },
+        '四月': { firstDay: new Date(2024, 4, 8), days: 30 },
+        '五月': { firstDay: new Date(2024, 5, 7), days: 29 },
+        '六月': { firstDay: new Date(2024, 6, 6), days: 30 },
+        '七月': { firstDay: new Date(2024, 7, 5), days: 29 },
+        '八月': { firstDay: new Date(2024, 8, 3), days: 30 },
+        '九月': { firstDay: new Date(2024, 9, 3), days: 29 },
+        '十月': { firstDay: new Date(2024, 10, 1), days: 30 },
+        '十一月': { firstDay: new Date(2024, 11, 1), days: 30 },
+        '十二月': { firstDay: new Date(2024, 11, 31), days: 29 }
+    },
+    '2025': {
+        '正月': { firstDay: new Date(2025, 0, 29), days: 30 },
+        '二月': { firstDay: new Date(2025, 1, 28), days: 29 },
+        '三月': { firstDay: new Date(2025, 2, 29), days: 30 },
+        '四月': { firstDay: new Date(2025, 3, 28), days: 29 },
+        '五月': { firstDay: new Date(2025, 4, 27), days: 30 },
+        '六月': { firstDay: new Date(2025, 5, 26), days: 29 },
+        '七月': { firstDay: new Date(2025, 6, 25), days: 30 },
+        '八月': { firstDay: new Date(2025, 7, 24), days: 29 },
+        '九月': { firstDay: new Date(2025, 8, 22), days: 30 },
+        '十月': { firstDay: new Date(2025, 9, 22), days: 29 },
+        '十一月': { firstDay: new Date(2025, 10, 20), days: 30 },
+        '十二月': { firstDay: new Date(2025, 11, 20), days: 30 }
+    }
 };
 
-// 反向映射表 - 從景點類型到類別
-const ATTRACTION_TYPE_TO_CATEGORY = {};
-Object.entries(ATTRACTION_CATEGORIES).forEach(([category, types]) => {
-    types.forEach(type => {
-        ATTRACTION_TYPE_TO_CATEGORY[type] = category;
-    });
-});
-
-// 分析用戶行程歷史，更新偏好設定
-function analyzeUserHistory() {
-    try {
-        console.log('分析用戶行程歷史...');
-        
-        // 載入用戶偏好設定
-        const savedPreferences = localStorage.getItem(USER_PREFERENCES_KEY);
-        if (savedPreferences) {
-            userPreferences = JSON.parse(savedPreferences);
-        }
-        
-        // 獲取已儲存的行程
-        const savedItineraries = JSON.parse(localStorage.getItem(SAVED_ITINERARIES_KEY) || '{}');
-        
-        // 如果沒有歷史行程，則不進行分析
-        if (Object.keys(savedItineraries).length === 0) {
-            console.log('沒有找到歷史行程數據，無法分析偏好');
-            return;
-        }
-        
-        // 重置偏好計數，但保留設定值
-        userPreferences.favoriteCategories = {};
-        userPreferences.visitedLocations = {};
-        userPreferences.preferredRegions = {};
-        
-        // 遍歷所有行程
-        Object.values(savedItineraries).forEach(itinerary => {
-            // 遍歷行程中的所有景點
-            itinerary.destinations.forEach(destination => {
-                // 記錄已訪問的地點
-                if (!userPreferences.visitedLocations[destination.name]) {
-                    userPreferences.visitedLocations[destination.name] = 0;
-                }
-                userPreferences.visitedLocations[destination.name]++;
-                
-                // 分析景點類型，更新類別偏好
-                const attractionType = determineAttractionType(destination.name);
-                if (attractionType) {
-                    const category = ATTRACTION_TYPE_TO_CATEGORY[attractionType] || '其他';
-                    
-                    if (!userPreferences.favoriteCategories[category]) {
-                        userPreferences.favoriteCategories[category] = 0;
-                    }
-                    // 停留時間越長，權重越高
-                    userPreferences.favoriteCategories[category] += destination.stayDuration || 1;
-                }
-                
-                // 分析地區偏好
-                if (destination.region) {
-                    if (!userPreferences.preferredRegions[destination.region]) {
-                        userPreferences.preferredRegions[destination.region] = 0;
-                    }
-                    userPreferences.preferredRegions[destination.region]++;
-                }
-            });
-        });
-        
-        // 儲存更新後的偏好設定
-        localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(userPreferences));
-        
-        console.log('用戶偏好分析完成：', userPreferences);
-    } catch (error) {
-        console.error('分析用戶偏好時發生錯誤:', error);
+// 農曆日期轉換函數
+function getLunarDate(date) {
+    // 如果沒有提供日期，使用當前日期
+    if (!date) {
+        date = new Date();
     }
-}
-
-// 嘗試確定景點類型
-function determineAttractionType(locationName) {
-    // 嘗試通過關鍵字匹配判斷類型
-    for (const [type, keywords] of Object.entries(DEFAULT_STAY_DURATION)) {
-        // 檢查地點名稱是否包含關鍵字
-        if (locationName.includes(type)) {
-            return type;
+    
+    // 取得年份
+    const year = date.getFullYear();
+    
+    // 檢查年份是否在支援範圍內
+    if (!LUNAR_INFO[year.toString()]) {
+        return '農曆日期不支援此年份';
+    }
+    
+    // 尋找日期所在的農曆月份
+    let lunarMonth = '';
+    let lunarDay = 0;
+    
+    const yearInfo = LUNAR_INFO[year.toString()];
+    const months = Object.keys(yearInfo);
+    
+    for (let i = 0; i < months.length; i++) {
+        const month = months[i];
+        const monthInfo = yearInfo[month];
+        const firstDay = monthInfo.firstDay;
+        const days = monthInfo.days;
+        
+        // 計算當前月的最後一天
+        const lastDay = new Date(firstDay);
+        lastDay.setDate(lastDay.getDate() + days - 1);
+        
+        // 檢查日期是否在此月範圍內
+        if (date >= firstDay && date <= lastDay) {
+            lunarMonth = month;
+            // 計算農曆日期
+            const dayDiff = Math.floor((date - firstDay) / (24 * 60 * 60 * 1000));
+            lunarDay = dayDiff + 1; // 農曆從初一開始
+            break;
+        }
+        
+        // 如果是最後一個月且日期比最後一天還晚，可能是下一年的正月
+        if (i === months.length - 1 && date > lastDay) {
+            // 嘗試獲取下一年的資料
+            const nextYear = (year + 1).toString();
+            if (LUNAR_INFO[nextYear] && LUNAR_INFO[nextYear]['正月']) {
+                const nextYearFirstMonth = LUNAR_INFO[nextYear]['正月'];
+                // 如果日期在下一年正月的第一天之前
+                if (date < nextYearFirstMonth.firstDay) {
+                    // 將其視為本年最後一個月的延續
+                    lunarMonth = month;
+                    const dayDiff = Math.floor((date - lastDay) / (24 * 60 * 60 * 1000));
+                    lunarDay = days + dayDiff;
+                }
+            }
         }
     }
     
-    // 無法確定類型
-    return null;
-}
-
-// 獲取推薦景點
-function getRecommendedAttractions(limit = 5) {
-    try {
-        // 首先分析用戶歷史
-        analyzeUserHistory();
-        
-        const recommendations = [];
-        
-        // 如果沒有足夠的偏好數據，返回熱門景點
-        if (Object.keys(userPreferences.favoriteCategories).length === 0) {
-            console.log('沒有足夠的偏好數據，返回熱門景點');
-            return getPopularAttractions(limit);
-        }
-        
-        // 獲取用戶最喜愛的類別（按權重排序）
-        const favoriteCategories = Object.entries(userPreferences.favoriteCategories)
-            .sort((a, b) => b[1] - a[1])
-            .map(entry => entry[0]);
-        
-        // 根據冒險程度，決定是否加入不常訪問的類別
-        if (userPreferences.adventureLevel > 3) {
-            // 找出較少訪問的類別
-            const lessVisitedCategories = Object.keys(ATTRACTION_CATEGORIES)
-                .filter(category => !favoriteCategories.includes(category) || 
-                        (userPreferences.favoriteCategories[category] || 0) < 2);
-            
-            // 按冒險程度添加不同比例的新類別
-            const newCategoriesCount = Math.min(
-                Math.floor(userPreferences.adventureLevel / 2),
-                lessVisitedCategories.length
-            );
-            
-            // 從較少訪問的類別中隨機選擇幾個
-            for (let i = 0; i < newCategoriesCount; i++) {
-                const randomIndex = Math.floor(Math.random() * lessVisitedCategories.length);
-                const category = lessVisitedCategories.splice(randomIndex, 1)[0];
-                favoriteCategories.push(category);
-            }
-        }
-        
-        // 從最喜愛的類別中獲取推薦景點
-        for (const category of favoriteCategories) {
-            // 獲取該類別的所有景點類型
-            const types = ATTRACTION_CATEGORIES[category] || [];
-            
-            for (const type of types) {
-                // 獲取該類型的熱門景點
-                const attractions = getPopularAttractionsOfType(type, 2);
-                
-                for (const attraction of attractions) {
-                    // 如果設置了避免重複且已訪問過，則跳過
-                    if (userPreferences.avoidRepeats && 
-                        userPreferences.visitedLocations[attraction.name]) {
-                        continue;
-                    }
-                    
-                    // 添加到推薦列表
-                    recommendations.push(attraction);
-                    
-                    // 達到推薦數量限制則返回
-                    if (recommendations.length >= limit) {
-                        return recommendations;
-                    }
-                }
-            }
-        }
-        
-        // 如果推薦數量不足，添加熱門景點
-        if (recommendations.length < limit) {
-            const remainingCount = limit - recommendations.length;
-            const popularAttractions = getPopularAttractions(remainingCount * 2);
-            
-            for (const attraction of popularAttractions) {
-                // 避免重複添加
-                if (!recommendations.some(rec => rec.name === attraction.name)) {
-                    recommendations.push(attraction);
-                    if (recommendations.length >= limit) {
-                        break;
-                    }
-                }
-            }
-        }
-        
-        return recommendations;
-    } catch (error) {
-        console.error('獲取推薦景點時發生錯誤:', error);
-        return [];
+    // 如果沒有找到對應的農曆月份，返回錯誤訊息
+    if (!lunarMonth) {
+        return '無法計算農曆日期';
     }
-}
-
-// 獲取熱門景點（預設列表，實際應用中可能來自 API 或資料庫）
-function getPopularAttractions(limit = 5, country = null) {
-    // 這裡可以替換為真實的 API 調用
-    const popularAttractions = [
-        // 台灣熱門景點
-        {
-            name: '台北 101',
-            coordinates: [25.0338, 121.5646],
-            stayDuration: 2,
-            description: '台北地標性建築，曾為世界最高建築',
-            type: '觀景台',
-            region: '台北',
-            country: '台灣'
-        },
-        {
-            name: '九份老街',
-            coordinates: [25.1089, 121.8443],
-            stayDuration: 3,
-            description: '知名的懷舊山城，有許多美食與紀念品',
-            type: '歷史街區',
-            region: '新北',
-            country: '台灣'
-        },
-        {
-            name: '墾丁國家公園',
-            coordinates: [21.9505, 120.7893],
-            stayDuration: 5,
-            description: '台灣最南端的國家公園，擁有美麗的海灘',
-            type: '國家公園',
-            region: '屏東',
-            country: '台灣'
-        },
-        {
-            name: '太魯閣國家公園',
-            coordinates: [24.1587, 121.6219],
-            stayDuration: 4,
-            description: '以大理石峽谷聞名的國家公園',
-            type: '國家公園',
-            region: '花蓮',
-            country: '台灣'
-        },
-        {
-            name: '日月潭',
-            coordinates: [23.8496, 120.9152],
-            stayDuration: 3,
-            description: '台灣最大的淡水湖泊，風景優美',
-            type: '湖',
-            region: '南投',
-            country: '台灣'
-        },
-        {
-            name: '阿里山國家森林遊樂區',
-            coordinates: [23.5116, 120.8030],
-            stayDuration: 4,
-            description: '以雲海、日出、古木、森林鐵路和晚霞聞名',
-            type: '森林',
-            region: '嘉義',
-            country: '台灣'
-        },
-        {
-            name: '故宮博物院',
-            coordinates: [25.1023, 121.5484],
-            stayDuration: 3,
-            description: '收藏大量中國藝術品和文物的博物館',
-            type: '博物館',
-            region: '台北',
-            country: '台灣'
-        },
-        {
-            name: '高美濕地',
-            coordinates: [24.3094, 120.5830],
-            stayDuration: 2,
-            description: '知名的生態保護區，以招潮蟹聞名',
-            type: '自然保護區',
-            region: '台中',
-            country: '台灣'
-        },
-        {
-            name: '六合夜市',
-            coordinates: [22.6311, 120.3009],
-            stayDuration: 2,
-            description: '高雄著名的夜市，提供各種美食',
-            type: '夜市',
-            region: '高雄',
-            country: '台灣'
-        },
-        {
-            name: '象山',
-            coordinates: [25.0275, 121.5713],
-            stayDuration: 1.5,
-            description: '可以俯瞰台北市區和台北101的熱門爬山景點',
-            type: '山',
-            region: '台北',
-            country: '台灣'
-        },
-        {
-            name: '淡水老街',
-            coordinates: [25.1725, 121.4419],
-            stayDuration: 2,
-            description: '充滿歷史風情，可欣賞美麗夕陽的河濱老街',
-            type: '歷史街區',
-            region: '新北',
-            country: '台灣'
-        },
-        {
-            name: '花蓮七星潭',
-            coordinates: [24.0327, 121.6290],
-            stayDuration: 1.5,
-            description: '新月形狀的海灣，有美麗的礫石海灘',
-            type: '海灘',
-            region: '花蓮',
-            country: '台灣'
-        },
-        {
-            name: '陽明山國家公園',
-            coordinates: [25.1559, 121.5476],
-            stayDuration: 3,
-            description: '以火山地質景觀聞名，有溫泉和花卉',
-            type: '國家公園',
-            region: '台北',
-            country: '台灣'
-        },
-        {
-            name: '逢甲夜市',
-            coordinates: [24.1791, 120.6462],
-            stayDuration: 2,
-            description: '台中最著名的夜市，有多樣美食和商品',
-            type: '夜市',
-            region: '台中',
-            country: '台灣'
-        },
-        
-        // 日本熱門景點
-        {
-            name: '東京晴空塔',
-            coordinates: [35.7101, 139.8107],
-            stayDuration: 2,
-            description: '東京最高的建築物，提供城市全景',
-            type: '觀景台',
-            region: '東京',
-            country: '日本'
-        },
-        {
-            name: '京都清水寺',
-            coordinates: [34.9949, 135.7851],
-            stayDuration: 2.5,
-            description: '歷史悠久的佛教寺廟，UNESCO世界遺產',
-            type: '寺廟',
-            region: '京都',
-            country: '日本'
-        },
-        {
-            name: '大阪城',
-            coordinates: [34.6873, 135.5260],
-            stayDuration: 2,
-            description: '日本著名城堡，被櫻花和梅花環繞',
-            type: '城堡',
-            region: '大阪',
-            country: '日本'
-        },
-        {
-            name: '廣島和平紀念公園',
-            coordinates: [34.3955, 132.4536],
-            stayDuration: 3,
-            description: '紀念原子彈受害者的歷史景點',
-            type: '博物館',
-            region: '廣島',
-            country: '日本'
-        },
-        {
-            name: '富士山',
-            coordinates: [35.3606, 138.7274],
-            stayDuration: 6,
-            description: '日本最高山峰，國家象徵',
-            type: '山',
-            region: '靜岡/山梨',
-            country: '日本'
-        },
-        {
-            name: '淺草寺',
-            coordinates: [35.7148, 139.7967],
-            stayDuration: 1.5,
-            description: '東京最古老的寺廟，雷門為著名地標',
-            type: '寺廟',
-            region: '東京',
-            country: '日本'
-        },
-        {
-            name: '奈良公園',
-            coordinates: [34.6851, 135.8398],
-            stayDuration: 2.5,
-            description: '可與野生鹿互動的公園，有多座古寺',
-            type: '公園',
-            region: '奈良',
-            country: '日本'
-        },
-        {
-            name: '箱根溫泉',
-            coordinates: [35.2323, 139.1069],
-            stayDuration: 4,
-            description: '著名溫泉度假區，可欣賞富士山景',
-            type: '溫泉區',
-            region: '神奈川',
-            country: '日本'
-        },
-        {
-            name: '伏見稻荷大社',
-            coordinates: [34.9671, 135.7727],
-            stayDuration: 2,
-            description: '千本鳥居聞名全球的神社',
-            type: '神社',
-            region: '京都',
-            country: '日本'
-        },
-        {
-            name: '金閣寺',
-            coordinates: [35.0394, 135.7292],
-            stayDuration: 1.5,
-            description: '外觀覆蓋金箔的禪宗佛寺',
-            type: '寺廟',
-            region: '京都',
-            country: '日本'
-        },
-        {
-            name: '秋葉原',
-            coordinates: [35.6980, 139.7687],
-            stayDuration: 3,
-            description: '電子產品和動漫文化的中心地',
-            type: '購物中心',
-            region: '東京',
-            country: '日本'
-        },
-        {
-            name: '沖繩水族館',
-            coordinates: [26.6939, 127.8779],
-            stayDuration: 2.5,
-            description: '日本最大的水族館之一，有巨大的鯊魚水箱',
-            type: '水族館',
-            region: '沖繩',
-            country: '日本'
-        },
-        {
-            name: '大阪環球影城',
-            coordinates: [34.6654, 135.4323],
-            stayDuration: 6,
-            description: '日本最受歡迎的主題公園之一',
-            type: '主題公園',
-            region: '大阪',
-            country: '日本'
-        },
-        {
-            name: '道頓堀',
-            coordinates: [34.6687, 135.5021],
-            stayDuration: 2.5,
-            description: '大阪著名美食街，有螃蟹招牌和霓虹燈',
-            type: '市場',
-            region: '大阪',
-            country: '日本'
-        }
+    
+    // 轉換農曆日為中文表示
+    const lunarDayNames = [
+        '初一', '初二', '初三', '初四', '初五', '初六', '初七', '初八', '初九', '初十',
+        '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十',
+        '廿一', '廿二', '廿三', '廿四', '廿五', '廿六', '廿七', '廿八', '廿九', '三十'
     ];
     
-    // 如果指定了國家，則篩選該國家的景點
-    let filteredAttractions = popularAttractions;
-    if (country) {
-        filteredAttractions = popularAttractions.filter(attraction => attraction.country === country);
-    }
-    
-    // 打亂順序後返回指定數量
-    return shuffleArray(filteredAttractions).slice(0, limit);
+    // 返回格式化的農曆日期
+    return `農曆 ${lunarMonth}${lunarDayNames[lunarDay - 1]}`;
 }
 
-// 獲取特定類型的熱門景點，可指定國家
-function getPopularAttractionsOfType(type, limit = 2, country = null) {
-    // 篩選特定類型的景點
-    const allAttractions = getPopularAttractions(50, country); // 獲取較多的景點以供篩選
-    const attractions = allAttractions.filter(a => a.type === type);
-    return attractions.slice(0, limit);
-}
-
-// 根據座標獲取附近的景點
-function getNearbyAttractions(coordinates, radius = 15, limit = 3, country = null) {
-    // 確保座標格式正確
-    if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
-        console.error('無效的座標格式', coordinates);
-        return [];
+// 轉換日期為帶農曆的展示格式
+function formatDateWithLunar(date) {
+    if (!(date instanceof Date)) {
+        return '日期錯誤';
     }
     
-    // 獲取所有景點
-    const allAttractions = getPopularAttractions(50, country);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+    const weekDay = weekDays[date.getDay()];
     
-    // 如果沒有可用景點，返回空數組
-    if (!allAttractions || allAttractions.length === 0) {
-        return [];
-    }
+    const lunarDate = getLunarDate(date);
     
-    // 計算每個景點到指定座標的距離
-    const attractionsWithDistance = allAttractions.map(attraction => {
-        // 確保景點有有效的座標
-        if (!attraction.coordinates || !Array.isArray(attraction.coordinates) || attraction.coordinates.length !== 2) {
-            console.warn('景點缺少有效座標', attraction.name);
-            return { ...attraction, distance: Infinity };
-        }
-        
-        const distance = calculateDistance(coordinates, attraction.coordinates);
-        return { ...attraction, distance };
-    });
-    
-    // 篩選在指定半徑內的景點
-    let nearbyAttractions = attractionsWithDistance
-        .filter(attraction => attraction.distance <= radius) // 確保距離在範圍內
-        .sort((a, b) => a.distance - b.distance); // 按距離從近到遠排序
-    
-    // 如果半徑內沒有足夠的景點，可以擴大搜尋範圍
-    if (nearbyAttractions.length < limit) {
-        console.log(`在 ${radius} 公里內只找到 ${nearbyAttractions.length} 個景點，嘗試擴大搜尋範圍`);
-        // 如果在指定半徑內找不到足夠的景點，使用最近的景點
-        nearbyAttractions = attractionsWithDistance
-            .sort((a, b) => a.distance - b.distance)
-            .slice(0, limit);
-    }
-    
-    // 添加距離資訊到景點描述
-    nearbyAttractions = nearbyAttractions.map(attraction => {
-        // 添加距離資訊到描述中，如果描述末尾沒有句號則添加
-        const description = attraction.description.endsWith('.') ? 
-            attraction.description : 
-            `${attraction.description}。`;
-            
-        return {
-            ...attraction,
-            description: `${description} 距離: ${attraction.distance} 公里`
-        };
-    });
-    
-    // 返回指定數量的附近景點
-    return nearbyAttractions.slice(0, limit);
-}
-
-// 獲取當前行程中所有位置的附近景點推薦
-function getNearbyAttractionsForItinerary(limit = 5, useCustomRadius = false, customRadius = 10) {
-    const recommendations = [];
-    const usedNames = new Set(); // 用於避免重複推薦
-    let baseRadius = useCustomRadius ? customRadius : 10; // 默認半徑或自定義半徑
-    
-    // 從出發點開始尋找附近景點
-    if (startingPoint) {
-        console.log(`從出發點 ${startingPoint.name} 尋找半徑 ${baseRadius} 公里內的景點`);
-        const nearbyFromStart = getNearbyAttractions(startingPoint.coordinates, baseRadius, 3);
-        nearbyFromStart.forEach(attraction => {
-            if (!usedNames.has(attraction.name) && 
-                !destinations.some(d => d.name === attraction.name)) {
-                recommendations.push(attraction);
-                usedNames.add(attraction.name);
-            }
-        });
-    }
-    
-    // 從每個已選擇的景點尋找附近景點，使用略小的半徑
-    for (const destination of destinations) {
-        // 如果已經收集足夠的推薦，則停止
-        if (recommendations.length >= limit) break;
-        
-        // 尋找該景點附近的其他景點，使用基礎半徑的 80%
-        const destinationRadius = baseRadius * 0.8;
-        console.log(`從目的地 ${destination.name} 尋找半徑 ${destinationRadius} 公里內的景點`);
-        const nearby = getNearbyAttractions(destination.coordinates, destinationRadius, 2);
-        nearby.forEach(attraction => {
-            // 避免重複推薦和已選擇的景點
-            if (!usedNames.has(attraction.name) && 
-                !destinations.some(d => d.name === attraction.name)) {
-                recommendations.push(attraction);
-                usedNames.add(attraction.name);
-                
-                // 如果已經收集足夠的推薦，則停止
-                if (recommendations.length >= limit) return;
-            }
-        });
-    }
-    
-    // 如果推薦數量不足，添加熱門景點補充
-    if (recommendations.length < limit) {
-        console.log(`附近景點推薦不足 ${limit} 個，添加熱門景點補充`);
-        const remainingCount = limit - recommendations.length;
-        const popularAttractions = getPopularAttractions(remainingCount * 2);
-        
-        for (const attraction of popularAttractions) {
-            if (!usedNames.has(attraction.name) && 
-                !destinations.some(d => d.name === attraction.name)) {
-                recommendations.push(attraction);
-                usedNames.add(attraction.name);
-                
-                if (recommendations.length >= limit) break;
-            }
-        }
-    }
-    
-    console.log(`總共推薦了 ${recommendations.length} 個景點`);
-    return recommendations;
-}
-
-// 隨機打亂陣列
-function shuffleArray(array) {
-    const newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-    }
-    return newArray;
-}
-
-// 顯示景點推薦對話框
-function showRecommendationsDialog() {
-    // 默認推薦類型為基於偏好
-    const defaultRecommendationType = 'preference';
-    
-    // 推薦功能類型
-    const recommendationTypes = {
-        preference: '根據偏好推薦',
-        nearby: '附近景點推薦',
-        taiwan: '台灣景點推薦',
-        japan: '日本景點推薦'
-    };
-    
-    // 取得基於偏好的推薦景點
-    let recommendations = getRecommendedAttractions(5);
-    
-    // 默認搜尋半徑
-    let searchRadius = 10; // 公里
-    
-    // 創建對話框
-    const dialogId = 'recommendations-dialog';
-    let dialog = document.getElementById(dialogId);
-    
-    // 如果對話框已存在，則移除
-    if (dialog) {
-        document.body.removeChild(dialog);
-    }
-    
-    // 創建新對話框
-    dialog = document.createElement('div');
-    dialog.id = dialogId;
-    dialog.className = 'custom-dialog';
-    dialog.style.zIndex = '1000';
-    
-    // 對話框標題
-    const titleBar = document.createElement('div');
-    titleBar.className = 'dialog-title';
-    titleBar.innerHTML = `
-        <h3>智能景點推薦</h3>
-        <button class="close-button">×</button>
-    `;
-    dialog.appendChild(titleBar);
-    
-    // 對話框內容
-    const content = document.createElement('div');
-    content.className = 'dialog-content';
-    
-    // 推薦類型切換部分
-    const recommendationTypeSection = document.createElement('div');
-    recommendationTypeSection.className = 'recommendation-type-section';
-    recommendationTypeSection.innerHTML = `
-        <h4>推薦方式</h4>
-        <div class="recommendation-type-buttons">
-            ${Object.entries(recommendationTypes).map(([value, label]) => `
-                <button class="recommendation-type-button ${value === defaultRecommendationType ? 'active' : ''}" 
-                        data-type="${value}">${label}</button>
-            `).join('')}
-        </div>
-    `;
-    content.appendChild(recommendationTypeSection);
-    
-    // 搜尋半徑設定（僅在附近景點模式顯示）
-    const radiusSection = document.createElement('div');
-    radiusSection.className = 'radius-section';
-    radiusSection.style.display = 'none'; // 默認隱藏
-    radiusSection.innerHTML = `
-        <h4>附近景點搜尋範圍</h4>
-        <div class="radius-controls">
-            <label for="search-radius">搜尋半徑 (公里)：</label>
-            <input type="range" id="search-radius" min="1" max="30" value="${searchRadius}">
-            <span id="radius-value">${searchRadius}</span>
-            <button id="apply-radius" class="apply-button">應用</button>
-        </div>
-    `;
-    content.appendChild(radiusSection);
-    
-    // 偏好設定部分
-    const preferencesSection = document.createElement('div');
-    preferencesSection.className = 'preferences-section';
-    preferencesSection.innerHTML = `
-        <h4>您的景點偏好設定</h4>
-        <div class="preference-controls">
-            <label for="adventure-level">冒險程度（推薦新類型景點的頻率）：</label>
-            <input type="range" id="adventure-level" min="1" max="5" value="${userPreferences.adventureLevel}">
-            <span id="adventure-level-value">${userPreferences.adventureLevel}</span>
-            
-            <div class="checkbox-control">
-                <input type="checkbox" id="avoid-repeats" ${userPreferences.avoidRepeats ? 'checked' : ''}>
-                <label for="avoid-repeats">避免推薦已訪問過的景點</label>
-            </div>
-        </div>
-        <button id="update-preferences">更新偏好設定</button>
-    `;
-    content.appendChild(preferencesSection);
-    
-    // 推薦景點列表容器
-    const recommendationsContainer = document.createElement('div');
-    recommendationsContainer.id = 'recommendations-container';
-    content.appendChild(recommendationsContainer);
-    
-    // 更新推薦景點列表
-    function updateRecommendations(type) {
-        // 根據類型獲取推薦
-        switch (type) {
-            case 'nearby':
-                if (startingPoint || destinations.length > 0) {
-                    // 更新顯示搜尋半徑設定
-                    radiusSection.style.display = 'block';
-                    
-                    // 使用當前設定的搜尋半徑
-                    recommendations = getNearbyAttractionsForItinerary(5, true, searchRadius);
-                } else {
-                    alert('請先設置出發點或添加至少一個景點，以便推薦附近景點');
-                    return;
-                }
-                break;
-            case 'taiwan':
-                // 隱藏搜尋半徑設定
-                radiusSection.style.display = 'none';
-                recommendations = getPopularAttractions(8, '台灣');
-                break;
-            case 'japan':
-                // 隱藏搜尋半徑設定
-                radiusSection.style.display = 'none';
-                recommendations = getPopularAttractions(8, '日本');
-                break;
-            case 'preference':
-            default:
-                // 隱藏搜尋半徑設定
-                radiusSection.style.display = 'none';
-                recommendations = getRecommendedAttractions(5);
-                break;
-        }
-        
-        // 更新推薦列表UI
-        const recommendationsSection = document.createElement('div');
-        recommendationsSection.className = 'recommendations-section';
-        
-        if (recommendations.length === 0) {
-            recommendationsSection.innerHTML = `
-                <h4>推薦景點</h4>
-                <p>暫無可推薦的景點。請嘗試調整偏好設定或新增更多行程。</p>
-            `;
-        } else {
-            recommendationsSection.innerHTML = `
-                <h4>推薦景點</h4>
-                <div class="recommendations-list">
-                    ${recommendations.map((attraction, index) => `
-                        <div class="recommendation-item">
-                            <div class="recommendation-info">
-                                <h5>${attraction.name}</h5>
-                                <p>${attraction.description || '暫無描述'}</p>
-                                <div class="recommendation-details">
-                                    <span>類型: ${attraction.type || '未知'}</span>
-                                    <span>地區: ${attraction.region || '未知'}</span>
-                                    <span>國家: ${attraction.country || '未知'}</span>
-                                    ${attraction.distance ? `<span class="distance-info">距離: ${attraction.distance} 公里</span>` : ''}
-                                    <span>建議停留: ${attraction.stayDuration || 1} 小時</span>
-                                </div>
-                            </div>
-                            <div class="recommendation-actions">
-                                <button class="add-recommended" data-index="${index}">添加到行程</button>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }
-        
-        // 清空並更新容器內容
-        const container = document.getElementById('recommendations-container');
-        container.innerHTML = '';
-        container.appendChild(recommendationsSection);
-        
-        // 重新添加事件監聽器
-        const addButtons = container.querySelectorAll('.add-recommended');
-        addButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                const index = parseInt(button.dataset.index, 10);
-                const attraction = recommendations[index];
-                
-                // 添加到行程
-                addDestination({
-                    name: attraction.name,
-                    coordinates: attraction.coordinates,
-                    stayDuration: attraction.stayDuration,
-                    type: attraction.type,
-                    region: attraction.region,
-                    country: attraction.country
-                });
-                
-                // 關閉對話框
-                document.body.removeChild(dialog);
-                
-                // 顯示成功訊息
-                alert(`已將「${attraction.name}」添加到行程`);
-            });
-        });
-    }
-    
-    dialog.appendChild(content);
-    
-    // 添加對話框到 body
-    document.body.appendChild(dialog);
-    
-    // 初始化推薦列表
-    updateRecommendations(defaultRecommendationType);
-    
-    // 關閉按鈕事件
-    dialog.querySelector('.close-button').addEventListener('click', () => {
-        document.body.removeChild(dialog);
-    });
-    
-    // 推薦類型按鈕事件
-    const typeButtons = dialog.querySelectorAll('.recommendation-type-button');
-    typeButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            // 更新按鈕狀態
-            typeButtons.forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-            
-            // 獲取推薦類型
-            const recommendationType = button.dataset.type;
-            
-            // 更新推薦列表
-            updateRecommendations(recommendationType);
-            
-            // 如果是偏好推薦，顯示偏好設定；否則隱藏
-            if (recommendationType === 'preference') {
-                preferencesSection.style.display = 'block';
-            } else {
-                preferencesSection.style.display = 'none';
-            }
-        });
-    });
-    
-    // 更新偏好設定按鈕事件
-    dialog.querySelector('#update-preferences').addEventListener('click', () => {
-        // 獲取新的偏好設定
-        userPreferences.adventureLevel = parseInt(dialog.querySelector('#adventure-level').value, 10);
-        userPreferences.avoidRepeats = dialog.querySelector('#avoid-repeats').checked;
-        
-        // 儲存更新後的偏好設定
-        localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(userPreferences));
-        
-        // 更新偏好推薦列表
-        updateRecommendations('preference');
-    });
-    
-    // 冒險程度滑塊事件
-    const adventureSlider = dialog.querySelector('#adventure-level');
-    const adventureValue = dialog.querySelector('#adventure-level-value');
-    adventureSlider.addEventListener('input', () => {
-        adventureValue.textContent = adventureSlider.value;
-    });
-    
-    // 搜尋半徑滑塊事件
-    const radiusSlider = dialog.querySelector('#search-radius');
-    const radiusValue = dialog.querySelector('#radius-value');
-    radiusSlider.addEventListener('input', () => {
-        radiusValue.textContent = radiusSlider.value;
-        searchRadius = parseInt(radiusSlider.value, 10);
-    });
-    
-    // 應用半徑按鈕事件
-    dialog.querySelector('#apply-radius').addEventListener('click', () => {
-        // 應用新的搜尋半徑
-        searchRadius = parseInt(dialog.querySelector('#search-radius').value, 10);
-        // 更新附近景點推薦
-        updateRecommendations('nearby');
-    });
-}
-
-// 創建時間標記
-function createTimeMarkers(maxHours) {
-    let markers = '';
-    
-    // 每小時添加一個標記
-    const hourMarkers = Math.min(12, maxHours); // 最多顯示12個標記，避免過於擁擠
-    const step = maxHours / hourMarkers;
-    
-    for (let i = 1; i <= hourMarkers; i++) {
-        const hours = i * step;
-        const percentage = (hours / maxHours) * 100;
-        
-        // 只顯示整數小時的標記
-        if (Math.round(hours * 10) / 10 === Math.floor(hours)) {
-            markers += `
-                <div class="day-progress-tick" style="left: ${percentage}%">
-                    <div class="day-progress-tick-label">${Math.floor(hours)}h</div>
-                </div>
-            `;
-        }
-    }
-    
-    return markers;
+    return `${year}年${month}月${day}日 (${weekDay}) ${lunarDate}`;
 }
