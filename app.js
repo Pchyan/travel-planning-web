@@ -1403,6 +1403,11 @@ function updateItinerary() {
             <div class="time-progress" style="height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-bottom: 15px;">
                 <div style="height: 100%; width: ${scheduledPercentage}%; background-color: ${scheduledPercentage > 90 ? '#e74c3c' : '#4CAF50'}; border-radius: 3px;"></div>
             </div>
+            <div style="text-align: right; margin-bottom: 10px;">
+                <button class="add-to-day-btn" onclick="showAddToSpecificDayDialog(${dayIndex})">
+                    <i class="fas fa-plus-circle"></i> 在此日添加景點
+                </button>
+            </div>
         `;
         dayCard.appendChild(dayTitle);
         
@@ -3503,46 +3508,150 @@ async function addDestinationToSpecificDay(location, targetDayIndex) {
         
         // 檢查添加後是否超過當天時間限制
         if (dayInfo.totalTime > daySetting.maxHours) {
-            // 超過時間限制，詢問是否調整
+            // 超過時間限制，顯示調整選項對話框
             const overTime = (dayInfo.totalTime - daySetting.maxHours).toFixed(1);
-            const message = `添加景點「${location}」後，第 ${targetDayIndex + 1} 天的行程將超出時間限制 ${overTime} 小時。\n\n您是否希望：\n1. 調整當天其他景點的停留時間\n2. 增加當天的行程時間限制\n3. 取消添加`;
             
-            const choice = prompt(message, "1");
+            // 創建對話框
+            const dialog = document.createElement('div');
+            dialog.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: rgba(0,0,0,0.6);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+                backdrop-filter: blur(3px);
+            `;
             
-            if (choice === "1") {
-                // 選擇調整當天其他景點的停留時間
-                const adjusted = adjustDayDestinationTimes(targetDayIndex, newDestination);
-                if (!adjusted) {
-                    alert('無法完成自動調整，請手動調整景點停留時間。');
-                    return;
-                }
-            } else if (choice === "2") {
-                // 選擇增加當天的時間限制
-                const newMaxHours = Math.ceil(dayInfo.totalTime * 10) / 10; // 四捨五入到小數點後一位
+            const dialogContent = document.createElement('div');
+            dialogContent.style.cssText = `
+                background: white;
+                padding: 25px;
+                border-radius: 8px;
+                max-width: 550px;
+                width: 90%;
+                box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+            `;
+            
+            dialogContent.innerHTML = `
+                <h3 style="color: #4a89dc; margin-bottom: 20px; text-align: center; font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">時間衝突提醒</h3>
+                <div style="margin-bottom: 20px; line-height: 1.5;">
+                    <div style="background-color: #fff9e6; border-left: 4px solid #f0ad4e; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                            <i class="fas fa-exclamation-triangle" style="color: #f0ad4e; margin-right: 10px; font-size: 18px;"></i>
+                            <span style="font-weight: bold; color: #555;">時間超出提示</span>
+                        </div>
+                        <p style="margin: 0; color: #666; line-height: 1.6;">
+                            添加景點「${location}」後，第 ${targetDayIndex + 1} 天的行程將超出時間限制 <strong>${overTime}</strong> 小時。
+                        </p>
+                    </div>
+                    
+                    <p style="margin-bottom: 15px;">請選擇以下選項以解決時間衝突：</p>
+                </div>
                 
-                // 更新或添加當天設定
-                const existingSettingIndex = dailySettings.findIndex(s => s.dayIndex === targetDayIndex);
-                if (existingSettingIndex >= 0) {
-                    dailySettings[existingSettingIndex].maxHours = newMaxHours;
-                } else {
-                    dailySettings.push({
-                        dayIndex: targetDayIndex,
-                        departureTime: daySetting.departureHours + ":" + (daySetting.departureMinutes < 10 ? "0" : "") + daySetting.departureMinutes,
-                        maxHours: newMaxHours
-                    });
-                }
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <button id="adjust-stay-time" style="background-color: #5cb85c; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; text-align: left; transition: all 0.2s ease; display: flex; align-items: center;">
+                        <i class="fas fa-clock" style="margin-right: 10px; font-size: 16px;"></i>
+                        <div>
+                            <div style="font-weight: bold;">自動調整景點停留時間</div>
+                            <div style="font-size: 12px; margin-top: 3px;">系統將自動減少當天其他景點的停留時間</div>
+                        </div>
+                    </button>
+                    
+                    <button id="increase-time-limit" style="background-color: #5bc0de; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; text-align: left; transition: all 0.2s ease; display: flex; align-items: center;">
+                        <i class="fas fa-hourglass-half" style="margin-right: 10px; font-size: 16px;"></i>
+                        <div>
+                            <div style="font-weight: bold;">增加當天行程時間</div>
+                            <div style="font-size: 12px; margin-top: 3px;">將當天的最大行程時間從 ${daySetting.maxHours} 小時增加到 ${Math.ceil(dayInfo.totalTime * 10) / 10} 小時</div>
+                        </div>
+                    </button>
+                    
+                    <button id="cancel-add" style="background-color: #f0ad4e; color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; text-align: left; transition: all 0.2s ease; display: flex; align-items: center;">
+                        <i class="fas fa-times" style="margin-right: 10px; font-size: 16px;"></i>
+                        <div>
+                            <div style="font-weight: bold;">取消添加</div>
+                            <div style="font-size: 12px; margin-top: 3px;">不添加此景點，返回上一步</div>
+                        </div>
+                    </button>
+                </div>
+            `;
+            
+            dialog.appendChild(dialogContent);
+            document.body.appendChild(dialog);
+            
+            // 定義選項的處理
+            return new Promise((resolve) => {
+                // 選項1：調整停留時間
+                document.getElementById('adjust-stay-time').addEventListener('click', async () => {
+                    // 移除對話框
+                    document.body.removeChild(dialog);
+                    
+                    // 嘗試調整當天其他景點的停留時間
+                    const adjusted = adjustDayDestinationTimes(targetDayIndex, newDestination);
+                    if (!adjusted) {
+                        alert('無法完成自動調整，請手動調整景點停留時間。');
+                        resolve(false);
+                        return;
+                    }
+                    
+                    // 添加新景點
+                    destinations.push(newDestination);
+                    updateMapAndItinerary(targetDayIndex, newDestination);
+                    resolve(true);
+                });
                 
-                alert(`已將第 ${targetDayIndex + 1} 天的行程時間限制調整為 ${newMaxHours} 小時。`);
-            } else {
-                // 取消添加
-                alert('已取消添加景點。');
-                return;
-            }
+                // 選項2：增加時間限制
+                document.getElementById('increase-time-limit').addEventListener('click', () => {
+                    // 移除對話框
+                    document.body.removeChild(dialog);
+                    
+                    // 計算新的最大時間
+                    const newMaxHours = Math.ceil(dayInfo.totalTime * 10) / 10;
+                    
+                    // 更新或添加當天設定
+                    const existingSettingIndex = dailySettings.findIndex(s => s.dayIndex === targetDayIndex);
+                    if (existingSettingIndex >= 0) {
+                        dailySettings[existingSettingIndex].maxHours = newMaxHours;
+                    } else {
+                        dailySettings.push({
+                            dayIndex: targetDayIndex,
+                            departureTime: daySetting.departureTime,
+                            maxHours: newMaxHours
+                        });
+                    }
+                    
+                    // 添加新景點
+                    destinations.push(newDestination);
+                    updateMapAndItinerary(targetDayIndex, newDestination);
+                    resolve(true);
+                });
+                
+                // 選項3：取消添加
+                document.getElementById('cancel-add').addEventListener('click', () => {
+                    // 移除對話框
+                    document.body.removeChild(dialog);
+                    alert('已取消添加景點。');
+                    resolve(false);
+                });
+            });
+        } else {
+            // 時間內可以正常添加
+            destinations.push(newDestination);
+            updateMapAndItinerary(targetDayIndex, newDestination);
+            return true;
         }
-        
-        // 添加到目的地列表
-        destinations.push(newDestination);
-        
+    } catch (error) {
+        console.error('添加景點到指定日期時出錯:', error);
+        alert(`添加景點失敗: ${error.message}`);
+        return false;
+    }
+    
+    // 輔助函數：更新地圖和行程
+    function updateMapAndItinerary(targetDayIndex, newDestination) {
         // 如果選擇的日期不是自動分配的日期，設置該景點為該日的結束點
         const simulatedDays = distributeItineraryToDays();
         const actualDayIndex = findDestinationDay(newDestination, simulatedDays);
@@ -3567,11 +3676,7 @@ async function addDestinationToSpecificDay(location, targetDayIndex) {
         // 保存當前狀態
         saveStateToHistory();
         
-        alert(`已成功添加景點「${location}」到第 ${targetDayIndex + 1} 天的行程中。`);
-        
-    } catch (error) {
-        console.error('添加景點到指定日期時出錯:', error);
-        alert(`添加景點失敗: ${error.message}`);
+        alert(`已成功添加景點「${newDestination.name}」到第 ${targetDayIndex + 1} 天的行程中。`);
     }
 }
 
@@ -4043,36 +4148,68 @@ function showAddToSpecificDayDialog(dayIndex) {
         left: 0;
         right: 0;
         bottom: 0;
-        background-color: rgba(0,0,0,0.5);
+        background-color: rgba(0,0,0,0.6);
         display: flex;
         justify-content: center;
         align-items: center;
         z-index: 1000;
+        backdrop-filter: blur(3px);
     `;
     
     const dialogContent = document.createElement('div');
     dialogContent.style.cssText = `
         background: white;
-        padding: 20px;
-        border-radius: 5px;
+        padding: 25px;
+        border-radius: 8px;
         max-width: 500px;
         width: 90%;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.2);
     `;
     
+    // 獲取當天的日期
+    let dateDisplay = '';
+    const departureDate = document.getElementById('departure-date')?.value;
+    if (departureDate) {
+        const tripStartDate = new Date(departureDate);
+        tripStartDate.setDate(tripStartDate.getDate() + dayIndex);
+        const formattedDate = formatDateWithLunar(tripStartDate);
+        dateDisplay = `<div style="color: #666; margin-bottom: 5px; font-size: 14px;">${formattedDate}</div>`;
+    }
+    
     dialogContent.innerHTML = `
-        <h3>添加景點到第 ${dayIndex + 1} 天</h3>
-        <div style="margin-bottom: 15px;">
-            <label for="specific-day-destination" style="display: block; margin-bottom: 5px;">景點名稱：</label>
-            <input type="text" id="specific-day-destination" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="請輸入景點名稱">
+        <h3 style="color: #4a89dc; margin-bottom: 20px; text-align: center; font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">添加景點到第 ${dayIndex + 1} 天</h3>
+        ${dateDisplay}
+        <div style="margin-bottom: 20px;">
+            <label for="specific-day-destination" style="display: block; margin-bottom: 10px; font-weight: bold; color: #333;">景點名稱：</label>
+            <div style="position: relative;">
+                <input type="text" id="specific-day-destination" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; box-sizing: border-box;" placeholder="請輸入景點名稱">
+                <i class="fas fa-search" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #aaa;"></i>
+            </div>
         </div>
-        <div style="display: flex; justify-content: space-between;">
-            <button id="add-to-day-confirm" style="background-color: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">添加</button>
-            <button id="add-to-day-cancel" style="background-color: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">取消</button>
+        
+        <div style="background-color: #f9f9f9; border-radius: 6px; padding: 15px; margin-bottom: 20px; border: 1px solid #eee;">
+            <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                <i class="fas fa-info-circle" style="color: #4a89dc; margin-right: 10px; font-size: 18px;"></i>
+                <span style="font-weight: bold; color: #555;">重要提示</span>
+            </div>
+            <p style="margin: 0; font-size: 14px; color: #666; line-height: 1.5;">
+                如果添加的景點使當天行程超出時間限制，系統會提供以下選項：
+                <ul style="margin-top: 8px; padding-left: 20px;">
+                    <li>自動調整其他景點的停留時間</li>
+                    <li>增加當天的行程時間限制</li>
+                    <li>取消添加此景點</li>
+                </ul>
+            </p>
         </div>
-        <p style="margin-top: 15px; font-size: 14px; color: #666;">
-            提示：如果景點添加後超出當天時間限制，系統將提供調整選項，
-            您可以選擇減少其他景點的停留時間或增加當天的行程時間限制。
-        </p>
+        
+        <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+            <button id="add-to-day-confirm" style="background-color: #4CAF50; color: white; border: none; padding: 12px 0; border-radius: 6px; cursor: pointer; flex: 1; margin-right: 15px; font-weight: bold; transition: all 0.2s ease;">
+                <i class="fas fa-plus-circle" style="margin-right: 8px;"></i> 添加景點
+            </button>
+            <button id="add-to-day-cancel" style="background-color: #f0ad4e; color: white; border: none; padding: 12px 0; border-radius: 6px; cursor: pointer; flex: 1; transition: all 0.2s ease;">
+                <i class="fas fa-times" style="margin-right: 8px;"></i> 取消
+            </button>
+        </div>
     `;
     
     dialog.appendChild(dialogContent);
