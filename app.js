@@ -1804,20 +1804,94 @@ function openScheduleQuery(transportMode, fromLocation, toLocation) {
     
     console.log(`查詢交通: ${transportMode}，從 ${fromLocation} 到 ${toLocation}，當前位置: ${currentCountry}/${currentCity}`);
     
-    // 直接使用Google Maps進行路線規劃
-    let travelMode = 'transit'; // 預設使用大眾運輸
+    // 檢查是否有保存的交通查詢偏好
+    let savedPreferences = localStorage.getItem('transportQueryPreferences');
+    let preferences = null;
+    
+    if (savedPreferences) {
+        try {
+            preferences = JSON.parse(savedPreferences);
+        } catch (e) {
+            console.error('無法解析保存的交通查詢偏好:', e);
+        }
+    }
+    
+    // 創建交通查詢設置對話框
+    showTransportQueryDialog(transportMode, fromLocation, toLocation, preferences);
+}
+
+// 顯示交通查詢設置對話框
+function showTransportQueryDialog(defaultMode, defaultFrom, defaultTo, savedPreferences) {
+    // 創建對話框
+    const dialog = document.createElement('div');
+    dialog.className = 'query-dialog';
+    dialog.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0,0,0,0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        backdrop-filter: blur(3px);
+    `;
+    
+    // 將預設值與保存的偏好合併
+    let transportMode = defaultMode;
+    let fromLocation = defaultFrom;
+    let toLocation = defaultTo;
+    let savePreferences = false;
+    
+    // 檢查是否已有保存偏好
+    let hasPreferences = false;
+    
+    if (savedPreferences) {
+        // 如果有保存的偏好，記住設置但不自動套用起點和終點
+        hasPreferences = true;
+        
+        // 只在用戶明確勾選了"記住起點"時才使用保存的起點
+        if (savedPreferences.saveFrom && savedPreferences.customFrom && savedPreferences.alwaysUseCustomFrom) {
+            fromLocation = savedPreferences.customFrom;
+        }
+        
+        // 只在用戶明確勾選了"記住終點"時才使用保存的終點
+        if (savedPreferences.saveTo && savedPreferences.customTo && savedPreferences.alwaysUseCustomTo) {
+            toLocation = savedPreferences.customTo;
+        }
+        
+        // 交通方式可以自動套用，因為它通常較為固定
+        if (savedPreferences.saveMode && savedPreferences.customMode) {
+            transportMode = savedPreferences.customMode;
+        }
+        
+        savePreferences = savedPreferences.savePreferences || false;
+    }
+    
+    // 獲取Google Maps支持的交通方式
+    const transportModes = [
+        { value: 'driving', text: '汽車/機車', icon: 'fa-car' },
+        { value: 'transit', text: '大眾運輸', icon: 'fa-bus' },
+        { value: 'walking', text: '步行', icon: 'fa-walking' },
+        { value: 'bicycling', text: '自行車', icon: 'fa-bicycle' }
+    ];
+    
+    // 將當前交通方式轉換為Google Maps支持的格式
+    let googleMapsMode = 'transit'; // 預設使用大眾運輸
     
     // 根據交通方式選擇適當的Google Maps旅行模式
     switch(transportMode) {
         case '步行':
-            travelMode = 'walking';
+            googleMapsMode = 'walking';
             break;
         case '自行車':
-            travelMode = 'bicycling';
+            googleMapsMode = 'bicycling';
             break;
         case '汽車':
         case '機車':
-            travelMode = 'driving';
+            googleMapsMode = 'driving';
             break;
         case '公車':
         case '捷運':
@@ -1827,19 +1901,165 @@ function openScheduleQuery(transportMode, fromLocation, toLocation) {
         case '電車':
         case '新幹線':
         default:
-            travelMode = 'transit';
+            googleMapsMode = 'transit';
             break;
     }
     
-    // 構建Google Maps URL
-    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(fromLocation)}&destination=${encodeURIComponent(toLocation)}&travelmode=${travelMode}`;
+    // 創建對話框內容
+    const dialogContent = document.createElement('div');
+    dialogContent.className = 'query-dialog-content';
+    dialogContent.style.cssText = `
+        background: white;
+        padding: 25px;
+        border-radius: 8px;
+        max-width: 550px;
+        width: 90%;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+    `;
     
-    // 打開查詢網站
-    window.open(googleMapsUrl, '_blank');
+    dialogContent.innerHTML = `
+        <h3 style="color: #4a89dc; margin-bottom: 20px; text-align: center; font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+            <i class="fas fa-route"></i> 自定義交通查詢
+        </h3>
+        
+        <div style="margin-bottom: 20px;">
+            <div style="margin-bottom: 15px;">
+                <label for="transport-mode" style="display: block; font-weight: bold; color: #333; margin-bottom: 10px;">交通方式:</label>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    ${transportModes.map(mode => `
+                        <div class="transport-mode-option ${googleMapsMode === mode.value ? 'active' : ''}" data-mode="${mode.value}" style="
+                            flex: 1; 
+                            min-width: 100px; 
+                            padding: 10px; 
+                            text-align: center; 
+                            border: 1px solid #ddd; 
+                            border-radius: 6px; 
+                            cursor: pointer;
+                            ${googleMapsMode === mode.value ? 'background-color: #4a89dc; color: white;' : 'background-color: #f9f9f9;'}
+                        ">
+                            <i class="fas ${mode.icon}" style="font-size: 20px; margin-bottom: 5px;"></i>
+                            <div>${mode.text}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label for="from-location" style="display: block; font-weight: bold; color: #333; margin-bottom: 10px;">起點:</label>
+                <input type="text" id="from-location" value="${fromLocation}" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 5px;">
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="save-from" ${savedPreferences && savedPreferences.saveFrom ? 'checked' : ''} style="margin-right: 10px;">
+                    <label for="save-from" style="font-size: 14px; color: #666;">記住此起點設置</label>
+                </div>
+                <div style="display: flex; align-items: center; margin-top: 5px;">
+                    <input type="checkbox" id="always-use-from" ${savedPreferences && savedPreferences.alwaysUseCustomFrom ? 'checked' : ''} style="margin-right: 10px;">
+                    <label for="always-use-from" style="font-size: 14px; color: #666;">總是使用自定義起點</label>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px;">
+                <label for="to-location" style="display: block; font-weight: bold; color: #333; margin-bottom: 10px;">終點:</label>
+                <input type="text" id="to-location" value="${toLocation}" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 5px;">
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="save-to" ${savedPreferences && savedPreferences.saveTo ? 'checked' : ''} style="margin-right: 10px;">
+                    <label for="save-to" style="font-size: 14px; color: #666;">記住此終點設置</label>
+                </div>
+                <div style="display: flex; align-items: center; margin-top: 5px;">
+                    <input type="checkbox" id="always-use-to" ${savedPreferences && savedPreferences.alwaysUseCustomTo ? 'checked' : ''} style="margin-right: 10px;">
+                    <label for="always-use-to" style="font-size: 14px; color: #666;">總是使用自定義終點</label>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                <div style="display: flex; align-items: center;">
+                    <input type="checkbox" id="save-preferences" ${savePreferences ? 'checked' : ''} style="margin-right: 10px;">
+                    <label for="save-preferences" style="font-weight: bold; color: #333;">將此設置保存為默認值</label>
+                </div>
+                <p style="margin-top: 5px; font-size: 13px; color: #666;">保存後，所有交通查詢將默認使用這些設置</p>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between;">
+            <button id="query-transport" class="query-btn" style="background-color: #4CAF50; color: white; border: none; padding: 12px 0; border-radius: 6px; cursor: pointer; flex: 1; margin-right: 15px; font-weight: bold;">
+                <i class="fas fa-search" style="margin-right: 8px;"></i> 查詢交通路線
+            </button>
+            <button id="cancel-query" class="query-btn" style="background-color: #f0ad4e; color: white; border: none; padding: 12px 0; border-radius: 6px; cursor: pointer; flex: 1;">
+                <i class="fas fa-times" style="margin-right: 8px;"></i> 取消
+            </button>
+        </div>
+    `;
     
-    console.log(`使用Google Maps查詢從 ${fromLocation} 到 ${toLocation} 的交通路線，交通方式: ${travelMode}`);
-    console.log(`打開URL: ${googleMapsUrl}`);
+    dialog.appendChild(dialogContent);
+    document.body.appendChild(dialog);
+    
+    // 為交通方式選項添加點擊事件
+    const transportOptions = document.querySelectorAll('.transport-mode-option');
+    transportOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            // 移除所有選項的選中狀態
+            transportOptions.forEach(opt => {
+                opt.classList.remove('active');
+                opt.style.backgroundColor = '#f9f9f9';
+                opt.style.color = '#333';
+            });
+            
+            // 設置當前選項為選中狀態
+            option.classList.add('active');
+            option.style.backgroundColor = '#4a89dc';
+            option.style.color = 'white';
+            
+            // 更新選中的交通方式
+            googleMapsMode = option.dataset.mode;
+        });
+    });
+    
+    // 查詢按鈕點擊事件
+    document.getElementById('query-transport').addEventListener('click', () => {
+        // 獲取用戶輸入的值
+        const customFrom = document.getElementById('from-location').value.trim();
+        const customTo = document.getElementById('to-location').value.trim();
+        const saveFrom = document.getElementById('save-from').checked;
+        const saveTo = document.getElementById('save-to').checked;
+        const alwaysUseCustomFrom = document.getElementById('always-use-from').checked;
+        const alwaysUseCustomTo = document.getElementById('always-use-to').checked;
+        const saveAllPreferences = document.getElementById('save-preferences').checked;
+        
+        // 保存用戶偏好設置
+        if (saveAllPreferences || saveFrom || saveTo || alwaysUseCustomFrom || alwaysUseCustomTo) {
+            const preferences = {
+                savePreferences: saveAllPreferences,
+                saveFrom: saveFrom,
+                customFrom: saveFrom ? customFrom : '',
+                alwaysUseCustomFrom: alwaysUseCustomFrom, 
+                saveTo: saveTo,
+                customTo: saveTo ? customTo : '',
+                alwaysUseCustomTo: alwaysUseCustomTo,
+                saveMode: saveAllPreferences,
+                customMode: saveAllPreferences ? googleMapsMode : ''
+            };
+            
+            localStorage.setItem('transportQueryPreferences', JSON.stringify(preferences));
+        }
+        
+        // 構建Google Maps URL
+        const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(customFrom)}&destination=${encodeURIComponent(customTo)}&travelmode=${googleMapsMode}`;
+        
+        // 關閉對話框
+        document.body.removeChild(dialog);
+        
+        // 打開Google Maps
+        window.open(googleMapsUrl, '_blank');
+        
+        console.log(`使用Google Maps查詢從 ${customFrom} 到 ${customTo} 的交通路線，交通方式: ${googleMapsMode}`);
+        console.log(`打開URL: ${googleMapsUrl}`);
+    });
+    
+    // 取消按鈕點擊事件
+    document.getElementById('cancel-query').addEventListener('click', () => {
+        document.body.removeChild(dialog);
+    });
 }
+
 // 拖曳相關變數
 let draggedItem = null;
 let touchDraggedItem = null;
