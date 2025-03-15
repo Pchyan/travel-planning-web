@@ -427,6 +427,9 @@ function initEventListeners() {
         repairLocalStorage();
     });
     
+    // 規劃新行程按鈕
+    document.getElementById('new-itinerary').addEventListener('click', startNewItinerary);
+    
     // Undo 和 Redo 按鈕
     document.getElementById('undo-button').addEventListener('click', undoAction);
     document.getElementById('redo-button').addEventListener('click', redoAction);
@@ -4426,5 +4429,48 @@ function reinitViewMode() {
         console.log('在翻頁模式下顯示第', currentDayIndex + 1, '天');
     } else {
         console.log('在列表模式下顯示所有天數');
+    }
+}
+
+// 清除現有行程並開始新規劃
+function startNewItinerary() {
+    if (destinations.length > 0 || startingPoint !== null) {
+        // 顯示確認對話框，避免意外清除
+        if (!confirm('確定要開始規劃新行程嗎？現有的行程資料將被清除！')) {
+            return;  // 用戶取消操作
+        }
+        
+        // 清除當前行程數據
+        startingPoint = null;
+        destinations = [];
+        departureDate = null;
+        departureTime = "09:00";
+        maxDailyHours = 8;
+        dailySettings = [];
+        dailyEndPoints = [];
+        
+        // 重置輸入欄位
+        document.getElementById('starting-point').value = '';
+        document.getElementById('new-destination').value = '';
+        document.getElementById('departure-date').value = '';
+        document.getElementById('departure-time').value = '09:00';
+        document.getElementById('max-daily-hours').value = '8';
+        
+        // 禁用添加景點功能，直到設置新的出發點
+        document.getElementById('new-destination').disabled = true;
+        document.getElementById('add-destination').disabled = true;
+        
+        // 清除地圖
+        clearMap();
+        
+        // 更新行程顯示
+        updateItinerary();
+        
+        // 保存當前狀態到歷史記錄
+        saveStateToHistory();
+        
+        console.log('已清除現有行程，可以開始新的規劃');
+    } else {
+        alert('目前沒有行程資料，可以直接開始規劃！');
     }
 }
