@@ -1261,72 +1261,89 @@ document.head.insertAdjacentHTML('beforeend', `
 function updateItinerary() {
     const daysContainer = document.querySelector('.days-container');
     daysContainer.innerHTML = '';
-    
+
+    // 檢查是否設置了起始點
     if (!startingPoint) {
-        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/5578/5578703.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請先設置出發點</p></div>';
+        daysContainer.innerHTML = '<div class="empty-state"><i class="fas fa-map-marker-alt" style="font-size: 32px; margin-bottom: 15px; color: #4a89dc;"></i><p>請先設置出發點</p></div>';
+        
+        // 隱藏分頁控制
+        document.getElementById('prev-day-btn').disabled = true;
+        document.getElementById('next-day-btn').disabled = true;
+        document.getElementById('current-day').textContent = '0';
+        document.getElementById('total-day-count').textContent = '0';
+        
+        // 更新行程統計
+        updateItinerarySummary();
         return;
     }
-    
+
+    // 檢查是否有目的地
     if (destinations.length === 0) {
-        daysContainer.innerHTML = '<div class="empty-state"><img src="https://cdn-icons-png.flaticon.com/512/1041/1041728.png" style="width: 120px; height: 120px; margin-bottom: 20px;"><p>請添加景點</p></div>';
+        daysContainer.innerHTML = '<div class="empty-state"><i class="fas fa-map-pin" style="font-size: 32px; margin-bottom: 15px; color: #4a89dc;"></i><p>尚未添加任何景點，請在上方添加景點開始規劃!</p></div>';
+        
+        // 隱藏分頁控制
+        document.getElementById('prev-day-btn').disabled = true;
+        document.getElementById('next-day-btn').disabled = true;
+        document.getElementById('current-day').textContent = '0';
+        document.getElementById('total-day-count').textContent = '0';
+        
+        // 更新行程統計
+        updateItinerarySummary();
         return;
     }
-    
-    // 分配行程到多天
+
+    // 基於目前的每日小時數將景點分配到不同的天數
     const days = distributeItineraryToDays();
-    
-    // 獲取當前日期，用於計算行程日期
-    const today = new Date();
-    const departureDate = document.getElementById('departure-date')?.value;
-    let tripStartDate;
-    
-    if (departureDate) {
-        tripStartDate = new Date(departureDate);
-    } else {
-        tripStartDate = new Date();
-    }
-    
-    // 创建每天的行程卡片
+
+    // 使用當地語言和農曆日期格式化日期
+    let currentDate = departureDate ? new Date(departureDate) : new Date();
+    let currentCountry = '';
+    let currentCity = '';
+
+    // 創建每天的行程卡片
     days.forEach((day, dayIndex) => {
         // 計算當前行程日期
-        const currentDate = new Date(tripStartDate);
-        currentDate.setDate(tripStartDate.getDate() + dayIndex);
-        const formattedDate = formatDateWithLunar(currentDate);
-        
+        const currentDateObj = new Date(currentDate);
+        const formattedDate = formatDateWithLunar(currentDateObj);
+
+        // 創建天卡片
         const dayCard = document.createElement('div');
         dayCard.className = 'day-card';
         dayCard.dataset.dayIndex = dayIndex;
         
-        // 設置卡片的基本樣式
-        if (dayIndex % 2 === 0) {
-            dayCard.style.backgroundColor = '#f9f9f9';
-        } else {
-            dayCard.style.backgroundColor = '#ffffff';
+        // 取得日程設定
+        let departureTimeValue = departureTime;
+        let maxHoursValue = maxDailyHours;
+        
+        // 如果有特定日期的設定，使用它
+        if (dailySettings[dayIndex]) {
+            departureTimeValue = dailySettings[dayIndex].departureTime || departureTimeValue;
+            maxHoursValue = dailySettings[dayIndex].maxHours || maxHoursValue;
         }
         
-        // 獲取當天的設定
-        const daySetting = dailySettings.find(setting => setting.dayIndex === dayIndex);
-        const departureTimeValue = daySetting ? daySetting.departureTime : departureTime;
-        const maxHoursValue = daySetting ? daySetting.maxHours : maxDailyHours;
-        
-        // 計算當天已安排的時間
+        // 計算已安排時間
         let scheduledHours = 0;
-        day.forEach((point, index) => {
-            if (index > 0) { // 跳過起點
-                scheduledHours += point.transportationFromPrevious.time;
-                if (!point.isEndPoint) {
+        day.forEach((point, pointIndex) => {
+            if (pointIndex > 0) { // 跳過起點
+                if (point.transportationFromPrevious) {
+                    scheduledHours += point.transportationFromPrevious.time;
+                }
+                if (point.stayDuration) {
                     scheduledHours += point.stayDuration;
                 }
             }
         });
         
-        // 計算剩餘時間
-        const remainingHours = Math.max(0, maxHoursValue - scheduledHours);
+        // 計算已安排時間占總時間的百分比
         const scheduledPercentage = Math.min(100, (scheduledHours / maxHoursValue) * 100);
         
-        // 创建天数标题和设置
+        // 日程標題和信息
         const dayTitle = document.createElement('div');
         dayTitle.className = 'day-title';
+        
+        // 設置下一天的日期
+        currentDate.setDate(currentDate.getDate() + (dayIndex > 0 ? 1 : 0));
+        
         dayTitle.innerHTML = `
             <div class="day-header">
                 <div>
@@ -1363,6 +1380,10 @@ function updateItinerary() {
             </div>
         `;
         dayCard.appendChild(dayTitle);
+        
+        // 將總時間儲存為dayCard的數據屬性，用於統計
+        const dayTotalTimeHours = scheduledHours.toFixed(1);
+        dayCard.setAttribute('data-total-time', dayTotalTimeHours);
         
         // 添加每个目的地
         day.forEach((point, pointIndex) => {
@@ -1558,6 +1579,14 @@ function updateItinerary() {
         
         daysContainer.appendChild(dayCard);
     });
+    
+    // 更新視圖模式相關元素
+    if (viewMode === 'page') {
+        navigateToDay(Math.min(currentDayIndex, days.length - 1));
+    }
+    
+    // 更新行程統計
+    updateItinerarySummary();
 }
 
 // 處理地圖點選事件
@@ -1719,6 +1748,17 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 載入選定的行程
         loadSelectedItinerary(selectedItineraryName);
+    }
+    
+    // 初始化視圖模式選擇器（確保在頁面加載時正確初始化）
+    if (typeof initializeViewModeSelector === 'function') {
+        initializeViewModeSelector();
+        
+        // 檢查本地儲存中是否有用戶偏好的視圖模式
+        const savedViewMode = localStorage.getItem('preferred_view_mode');
+        if (savedViewMode && typeof switchViewMode === 'function') {
+            switchViewMode(savedViewMode);
+        }
     }
     
     // 應用程式初始化後，保存第一個狀態到歷史記錄
@@ -4144,3 +4184,164 @@ function formatDateWithLunar(date) {
     
     return `${year}年${month}月${day}日 (${weekDay}) ${lunarDate}`;
 }
+
+// 視圖模式切換功能
+let currentDayIndex = 0;
+let viewMode = 'single-page'; // 'single-page' 或 'page'
+
+function initializeViewModeSelector() {
+    const singlePageBtn = document.getElementById('single-page-view-btn');
+    const pageViewBtn = document.getElementById('page-view-btn');
+    const daysContainer = document.querySelector('.days-container');
+    const prevDayBtn = document.getElementById('prev-day-btn');
+    const nextDayBtn = document.getElementById('next-day-btn');
+    const currentDaySpan = document.getElementById('current-day');
+    const totalDayCountSpan = document.getElementById('total-day-count');
+    
+    // 初始化按鈕事件
+    singlePageBtn.addEventListener('click', () => {
+        switchViewMode('single-page');
+    });
+    
+    pageViewBtn.addEventListener('click', () => {
+        switchViewMode('page');
+    });
+    
+    // 翻頁控制事件
+    prevDayBtn.addEventListener('click', () => {
+        navigateToDay(currentDayIndex - 1);
+    });
+    
+    nextDayBtn.addEventListener('click', () => {
+        navigateToDay(currentDayIndex + 1);
+    });
+    
+    // 監聽鍵盤方向鍵
+    document.addEventListener('keydown', (e) => {
+        if (viewMode !== 'page') return;
+        
+        if (e.key === 'ArrowLeft' && !prevDayBtn.disabled) {
+            navigateToDay(currentDayIndex - 1);
+        } else if (e.key === 'ArrowRight' && !nextDayBtn.disabled) {
+            navigateToDay(currentDayIndex + 1);
+        }
+    });
+    
+    // 初始化視圖模式
+    switchViewMode(viewMode);
+}
+
+function switchViewMode(mode) {
+    viewMode = mode;
+    const daysContainer = document.querySelector('.days-container');
+    const singlePageBtn = document.getElementById('single-page-view-btn');
+    const pageViewBtn = document.getElementById('page-view-btn');
+    
+    // 更新按鈕樣式
+    if (mode === 'single-page') {
+        singlePageBtn.classList.add('active');
+        pageViewBtn.classList.remove('active');
+        daysContainer.classList.remove('page-mode');
+        daysContainer.classList.add('single-page-mode');
+    } else {
+        pageViewBtn.classList.add('active');
+        singlePageBtn.classList.remove('active');
+        daysContainer.classList.add('page-mode');
+        daysContainer.classList.remove('single-page-mode');
+        
+        // 導航到當前天數
+        navigateToDay(currentDayIndex);
+    }
+    
+    // 儲存用戶偏好的視圖模式
+    localStorage.setItem('preferred_view_mode', mode);
+    
+    // 更新統計數據
+    updateItinerarySummary();
+}
+
+function navigateToDay(dayIndex) {
+    const dayCards = document.querySelectorAll('.day-card');
+    const totalDays = dayCards.length;
+    const prevDayBtn = document.getElementById('prev-day-btn');
+    const nextDayBtn = document.getElementById('next-day-btn');
+    const currentDaySpan = document.getElementById('current-day');
+    const totalDayCountSpan = document.getElementById('total-day-count');
+    
+    // 驗證索引範圍
+    if (dayIndex < 0 || dayIndex >= totalDays) return;
+    
+    // 更新當前天數索引
+    currentDayIndex = dayIndex;
+    
+    // 更新分頁指示器
+    currentDaySpan.textContent = (currentDayIndex + 1).toString();
+    totalDayCountSpan.textContent = totalDays.toString();
+    
+    // 啟用/禁用分頁按鈕
+    prevDayBtn.disabled = currentDayIndex === 0;
+    nextDayBtn.disabled = currentDayIndex === totalDays - 1;
+    
+    // 更新日程卡片顯示
+    dayCards.forEach((card, index) => {
+        card.classList.remove('active-day', 'slide-in-next', 'slide-in-prev');
+        
+        if (index === currentDayIndex) {
+            card.classList.add('active-day');
+            
+            // 添加滑動動畫
+            if (index > 0 && prevDayBtn.disabled === false) {
+                card.classList.add('slide-in-prev');
+            } else if (index < totalDays - 1 && nextDayBtn.disabled === false) {
+                card.classList.add('slide-in-next');
+            }
+        }
+    });
+    
+    // 滾動到頂部
+    window.scrollTo({
+        top: document.querySelector('.itinerary-section').offsetTop - 20,
+        behavior: 'smooth'
+    });
+}
+
+// 計算並更新行程統計信息
+function updateItinerarySummary() {
+    // 獲取顯示元素
+    const totalDaysElem = document.getElementById('total-days');
+    const totalDestinationsElem = document.getElementById('total-destinations');
+    const totalTimeElem = document.getElementById('total-time');
+    
+    // 計算總天數
+    const dayCards = document.querySelectorAll('.day-card');
+    const totalDays = dayCards.length;
+    totalDaysElem.textContent = totalDays.toString();
+    
+    // 計算總景點數
+    let totalDestinations = 0;
+    dayCards.forEach(card => {
+        // 對於每個日程卡片，計算目的地項目（不包括出發點）
+        const destinationItems = card.querySelectorAll('.destination-item:not([data-is-starting-point="true"])');
+        totalDestinations += destinationItems.length;
+    });
+    totalDestinationsElem.textContent = totalDestinations.toString();
+    
+    // 計算總行程時間
+    let totalTime = 0;
+    dayCards.forEach(card => {
+        // 嘗試從日程卡片的數據屬性中獲取總時間
+        const dayTime = parseFloat(card.getAttribute('data-total-time') || '0');
+        totalTime += dayTime;
+    });
+    totalTimeElem.textContent = totalTime.toFixed(1);
+}
+
+// 添加初始化視圖模式選擇器到頁面加載處理
+document.addEventListener('DOMContentLoaded', () => {
+    // ... 現有代碼 ...
+    
+    // 初始化視圖模式選擇器
+    initializeViewModeSelector();
+    
+    // ... 其他現有代碼 ...
+});
