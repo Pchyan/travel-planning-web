@@ -92,60 +92,39 @@
             <section class="itinerary-section">
                 <h2>行程安排</h2>
                 
-                <div class="view-mode-selector">
-                    <button class="view-mode-button active" id="single-page-view-btn" data-mode="single-page">
-                        <i class="fas fa-list-ul"></i> 全部顯示
-                    </button>
-                    <button class="view-mode-button" id="page-view-btn" data-mode="page">
-                        <i class="fas fa-book-open"></i> 翻頁模式
-                    </button>
+                <div class="view-mode-toggle">
+                    <label>顯示模式：</label>
+                    <button id="page-mode-btn" class="view-mode-button"><i class="fas fa-book-open"></i> 翻頁模式</button>
+                    <button id="list-mode-btn" class="view-mode-button active"><i class="fas fa-list"></i> 一頁式</button>
                 </div>
                 
                 <div class="itinerary-summary">
-                    <div class="itinerary-summary-title">
-                        <i class="fas fa-route"></i> 行程總覽
-                    </div>
-                    <div class="itinerary-stats">
-                        <div class="itinerary-stat">
-                            <div class="stat-label">總天數</div>
-                            <div class="stat-value" id="total-days">0</div>
-                            <div class="stat-label">天</div>
-                        </div>
-                        <div class="itinerary-stat">
-                            <div class="stat-label">總景點數</div>
-                            <div class="stat-value" id="total-destinations">0</div>
-                            <div class="stat-label">個地點</div>
-                        </div>
-                        <div class="itinerary-stat">
-                            <div class="stat-label">總行程時間</div>
-                            <div class="stat-value" id="total-time">0</div>
-                            <div class="stat-label">小時</div>
-                        </div>
+                    <div class="summary-title">行程概覽</div>
+                    <div class="summary-days" id="summary-days-container">
+                        <!-- 這裡將由 JavaScript 動態填充日期選項 -->
                     </div>
                 </div>
                 
-                <div class="days-container single-page-mode">
-                    <!-- 行程天數將在這裡動態生成 -->
+                <div id="itinerary-container">
+                    <!-- 這裡將由 JavaScript 動態填充行程內容 -->
                 </div>
                 
-                <div class="pagination-controls">
-                    <button class="pagination-button" id="prev-day-btn" disabled>
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <div class="page-indicator">第 <span id="current-day">1</span> 天，共 <span id="total-day-count">1</span> 天</div>
-                    <button class="pagination-button" id="next-day-btn" disabled>
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
+                <div class="pager-controls">
+                    <button id="prev-page-btn" class="page-nav-button"><i class="fas fa-chevron-left"></i> 上一天</button>
+                    <div class="page-indicator">
+                        <span>第 <span id="current-page">1</span> 天</span>
+                        <div class="page-dots" id="page-dots-container">
+                            <!-- 這裡將由 JavaScript 動態填充頁點 -->
+                        </div>
+                        <span>共 <span id="total-pages">0</span> 天</span>
+                    </div>
+                    <button id="next-page-btn" class="page-nav-button">下一天 <i class="fas fa-chevron-right"></i></button>
                 </div>
             </section>
             
             <section class="map-section">
                 <h2>地圖預覽</h2>
                 <div id="map"></div>
-                <div id="map-loading" class="map-loading">
-                    <i class="fas fa-spinner"></i>
-                    <div class="map-loading-text">地圖載入中...</div>
-                </div>
             </section>
         </main>
         
@@ -161,8 +140,6 @@
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
-        
-        // 注意：視圖模式初始化已移至 app.js 的 DOMContentLoaded 事件處理程序中
     </script>
 </body>
 </html>
