@@ -717,17 +717,55 @@ function distributeItineraryToDays() {
     });
     
     // 檢查當前天是否有設定結束地點
-    const checkDayEndPoint = (dayIndex, destination) => {
+    const checkDayEndPoint = (dayIndex, destination, destIndex) => {
         const dayEndPoint = dailyEndPoints.find(ep => ep.dayIndex === dayIndex);
         
         if (!dayEndPoint) return false;
         
-        // 精確比較名稱和座標，避免誤判
-        return (
-            destination.name === dayEndPoint.endPoint.name && 
-            Math.abs(destination.coordinates[0] - dayEndPoint.endPoint.coordinates[0]) < 0.0000001 && 
-            Math.abs(destination.coordinates[1] - dayEndPoint.endPoint.coordinates[1]) < 0.0000001
-        );
+        // 先按名稱匹配
+        if (destination.name === dayEndPoint.endPoint.name) {
+            // 如果名稱匹配，檢查此景點是否為當天行程中此名稱的最後一個景點
+            // 為此，需要找出當天所有同名景點
+            const dayDestinations = destinations.filter((dest, i) => {
+                // 通過模擬行程分配邏輯來確定景點在哪一天
+                let destDay = 0;
+                let currentTime = 0;
+                let lastCoords = startingPoint.coordinates;
+                
+                for (let j = 0; j <= i; j++) {
+                    // 計算交通時間
+                    const transport = determineTransportation(lastCoords, destinations[j].coordinates);
+                    // 累計時間
+                    currentTime += transport.time + (j === i ? 0 : destinations[j].stayDuration);
+                    
+                    // 檢查是否需要換天
+                    if (currentTime > getDaySettings(destDay).maxHours) {
+                        destDay++;
+                        currentTime = transport.time;
+                    }
+                    
+                    lastCoords = destinations[j].coordinates;
+                }
+                
+                return destDay === dayIndex && destinations[i].name === destination.name;
+            });
+            
+            // 查找當前景點在同名景點中的位置
+            const currentDestIndex = destinations.indexOf(destination);
+            
+            // 如果是最後一個同名景點，則標記為結束點
+            const isLastOccurrence = currentDestIndex === Math.max(...dayDestinations.map(d => destinations.indexOf(d)));
+            
+            if (isLastOccurrence) {
+                // 精確比較座標，以進一步確認
+                return (
+                    Math.abs(destination.coordinates[0] - dayEndPoint.endPoint.coordinates[0]) < 0.0000001 && 
+                    Math.abs(destination.coordinates[1] - dayEndPoint.endPoint.coordinates[1]) < 0.0000001
+                );
+            }
+        }
+        
+        return false;
     };
     
     // 遍歷所有目的地
@@ -745,7 +783,7 @@ function distributeItineraryToDays() {
         const totalTimeWithCurrentDestination = currentDayDuration + transportation.time + destination.stayDuration;
         
         // 檢查是否是當天的結束地點
-        const isEndPoint = checkDayEndPoint(currentDayIndex, destination);
+        const isEndPoint = checkDayEndPoint(currentDayIndex, destination, i);
         
         // 檢查是否是當天的最後一個景點
         const isLastDestination = 
@@ -1353,6 +1391,14 @@ function updateItinerary() {
                         <span style="font-size: 12px; color: #666;">(已安排: ${scheduledHours.toFixed(1)} 小時)</span>
                     </div>
                 </div>
+                <div>
+                    <button class="day-settings-button" onclick="editDaySettings(${dayIndex})">
+                        <i class="fas fa-cog"></i> 設定
+                    </button>
+                    <div style="font-size: 12px; color: #777; text-align: center; margin-top: 5px;">
+                        可設定每日出發時間及行程時間
+                    </div>
+                </div>
             </div>
             <div class="time-progress" style="height: 6px; background-color: #e0e0e0; border-radius: 3px; margin-bottom: 15px;">
                 <div style="height: 100%; width: ${scheduledPercentage}%; background-color: ${scheduledPercentage > 90 ? '#e74c3c' : '#4CAF50'}; border-radius: 3px;"></div>
@@ -1500,7 +1546,7 @@ function updateItinerary() {
                     destinationItem.dataset.isEndPoint = "true";
                     destinationItem.draggable = false; // 結束點不可拖曳
                 } else {
-                    destinationItem.draggable = true;
+                destinationItem.draggable = true;
                 }
                 
                 // 添加停留時間編輯功能
@@ -2207,34 +2253,64 @@ function editDaySettings(dayIndex) {
     dialogContent.className = 'settings-dialog-content';
     dialogContent.style.cssText = `
         background: white;
-        padding: 20px;
-        border-radius: 5px;
-        width: 400px;
+        padding: 25px;
+        border-radius: 8px;
+        width: 450px;
         max-width: 90%;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     `;
     
     dialogContent.innerHTML = `
-        <h3>第 ${dayIndex + 1} 天設定</h3>
-        <div class="settings-form">
-            <div class="settings-row">
-                <label for="day-departure-time">出發時間:</label>
-                <input type="time" id="day-departure-time" value="${currentDepartureTime}">
+        <h3 style="color: #4a89dc; margin-bottom: 15px; text-align: center; font-size: 20px;">第 ${dayIndex + 1} 天個人化設定</h3>
+        <p style="color: #666; margin-bottom: 25px; font-size: 14px; text-align: center; line-height: 1.5;">
+            您可以為這一天設定特定的出發時間和行程總時間，不受全局設定影響
+        </p>
+        <div class="settings-form" style="margin-bottom: 15px;">
+            <div class="settings-group" style="border: 1px solid #eee; border-radius: 8px; padding: 15px; margin-bottom: 20px; background-color: #f9f9f9;">
+                <h4 style="margin-top: 0; margin-bottom: 15px; color: #555; font-size: 16px;">時間設定</h4>
+                <div class="settings-row" style="margin-bottom: 15px; display: flex; align-items: center;">
+                    <label for="day-departure-time" style="min-width: 100px; font-weight: bold; color: #333;">出發時間:</label>
+                    <input type="time" id="day-departure-time" value="${currentDepartureTime}" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; appearance: textfield;">
+                </div>
+                <div class="settings-row" style="margin-bottom: 5px; display: flex; align-items: center;">
+                    <label for="day-max-hours" style="min-width: 100px; font-weight: bold; color: #333;">行程時間:</label>
+                    <input type="number" id="day-max-hours" min="1" max="24" step="0.5" value="${currentMaxHours}" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                    <span style="margin-left: 10px; color: #555;">小時</span>
+                </div>
             </div>
-            <div class="settings-row">
-                <label for="day-max-hours">行程時間:</label>
-                <input type="number" id="day-max-hours" min="1" max="24" step="0.5" value="${currentMaxHours}">
-                <span>小時</span>
+            
+            <div class="settings-group" style="border: 1px solid #eee; border-radius: 8px; padding: 15px; margin-bottom: 20px; background-color: #f9f9f9;">
+                <h4 style="margin-top: 0; margin-bottom: 15px; color: #555; font-size: 16px;">結束地點設定</h4>
+                <div class="settings-row">
+                    <label for="day-end-point" style="display: block; font-weight: bold; color: #333; margin-bottom: 10px;">結束地點:</label>
+                    <div style="position: relative;">
+                        <input type="text" id="day-end-point" placeholder="請輸入結束地點" value="${currentEndPoint}" 
+                               style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; margin-bottom: 12px; box-sizing: border-box;">
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; width: 100%;">
+                        <button id="use-saved-location" 
+                                style="background-color: #5bc0de; border: none; color: white; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; display: flex; align-items: center;">
+                            <i class="fas fa-map-marker-alt" style="margin-right: 5px;"></i> 選擇位置
+                        </button>
+                        ${currentEndPoint ? `
+                        <button id="remove-end-point" 
+                                style="background-color: #d9534f; border: none; color: white; padding: 8px 15px; border-radius: 4px; cursor: pointer; display: flex; align-items: center;">
+                            <i class="fas fa-times" style="margin-right: 5px;"></i> 移除
+                        </button>` : ''}
+                    </div>
+                </div>
             </div>
-            <div class="settings-row">
-                <label for="day-end-point">結束地點:</label>
-                <input type="text" id="day-end-point" placeholder="請輸入結束地點" value="${currentEndPoint}">
-                <button id="use-saved-location">使用已儲存位置</button>
-                ${currentEndPoint ? `<button id="remove-end-point">移除</button>` : ''}
-            </div>
-            <div class="settings-actions">
-                <button id="save-day-settings">儲存</button>
-                <button id="cancel-day-settings">取消</button>
-                <button id="reset-day-settings">重置為默認</button>
+            
+            <div class="settings-actions" style="display: flex; justify-content: space-between; margin-top: 20px;">
+                <button id="save-day-settings" style="background-color: #5cb85c; border: none; color: white; padding: 12px 0; border-radius: 4px; cursor: pointer; flex: 1; margin-right: 10px; font-weight: bold;">
+                    <i class="fas fa-save"></i> 儲存設定
+                </button>
+                <button id="cancel-day-settings" style="background-color: #f0ad4e; border: none; color: white; padding: 12px 0; border-radius: 4px; cursor: pointer; flex: 1; margin-right: 10px;">
+                    <i class="fas fa-times"></i> 取消
+                </button>
+                <button id="reset-day-settings" style="background-color: #d9534f; border: none; color: white; padding: 12px 0; border-radius: 4px; cursor: pointer; flex: 1;">
+                    <i class="fas fa-undo"></i> 重置
+                </button>
             </div>
         </div>
     `;
@@ -2260,42 +2336,51 @@ function editDaySettings(dayIndex) {
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: rgba(0,0,0,0.5);
+            background-color: rgba(0,0,0,0.6);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1001;
+            backdrop-filter: blur(3px);
         `;
         
         const locationContent = document.createElement('div');
         locationContent.style.cssText = `
             background: white;
-            padding: 20px;
-            border-radius: 5px;
-            width: 400px;
+            padding: 25px;
+            border-radius: 8px;
+            width: 450px;
             max-width: 90%;
             max-height: 70vh;
             overflow-y: auto;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
         `;
         
         // 建立位置列表
         const locationList = Object.entries(locationCache).map(([name, coords]) => {
             return `
-            <div style="padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;" 
-                 class="location-item" data-name="${name}" data-lat="${coords[0]}" data-lng="${coords[1]}">
-                <strong>${name}</strong>
-                <div>經緯度: [${coords[0]}, ${coords[1]}]</div>
+            <div style="padding: 15px; margin-bottom: 12px; border: 1px solid #eee; border-radius: 6px; cursor: pointer; transition: all 0.3s ease; background-color: #f9f9f9;" 
+                 class="location-item" data-name="${name}" data-lat="${coords[0]}" data-lng="${coords[1]}"
+                 onmouseover="this.style.backgroundColor='#f0f7ff'" 
+                 onmouseout="this.style.backgroundColor='#f9f9f9'">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong style="font-size: 16px; color: #333;">${name}</strong>
+                    <span style="color: #4a89dc; font-size: 12px;"><i class="fas fa-map-marker-alt"></i> 已儲存位置</span>
+                </div>
+                <div style="color: #777; margin-top: 8px; font-size: 13px;">經緯度: [${coords[0].toFixed(6)}, ${coords[1].toFixed(6)}]</div>
             </div>
             `;
         }).join('');
         
         locationContent.innerHTML = `
-            <h3>選擇已儲存的位置</h3>
-            <div style="margin-bottom: 15px;">
-                ${locationList}
+            <h3 style="color: #4a89dc; margin-bottom: 20px; text-align: center; font-size: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">選擇已儲存的位置</h3>
+            <div style="margin-bottom: 20px; max-height: 350px; overflow-y: auto; padding-right: 10px;">
+                ${locationList.length > 0 ? locationList : '<div style="text-align: center; padding: 20px; color: #666;">沒有已儲存的位置</div>'}
             </div>
-            <div style="text-align: right;">
-                <button id="cancel-location-select">取消</button>
+            <div style="text-align: right; margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                <button id="cancel-location-select" style="background-color: #f0ad4e; border: none; color: white; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; transition: all 0.2s ease;">
+                    <i class="fas fa-times"></i> 取消選擇
+                </button>
             </div>
         `;
         
@@ -2793,6 +2878,23 @@ function setDayEndPoint(dayIndex, endPointLocation) {
     
     // 檢查是否是儲存的經緯度位置
     let coordinates;
+    
+    // 首先檢查該景點是否在當天行程中出現過，如果有，且出現多次，使用最後一次出現的景點坐標
+    const currentDayDestinations = days[dayIndex].filter(point => !point.isStartingPoint);
+    const matchingDestinations = currentDayDestinations.filter(point => point.name === endPointLocation);
+    
+    if (matchingDestinations.length > 0) {
+        // 如果同名景點在當天行程中存在，取最後一個
+        const lastMatchingDestination = matchingDestinations[matchingDestinations.length - 1];
+        coordinates = lastMatchingDestination.coordinates;
+        console.log(`景點 "${endPointLocation}" 在第 ${dayIndex + 1} 天出現 ${matchingDestinations.length} 次，使用最後一次出現的坐標設為結束點`);
+        
+        // 直接設定結束地點
+        setEndPointWithCoordinates(dayIndex, endPointLocation, coordinates);
+        return;
+    }
+    
+    // 如果行程中沒有該景點，檢查是否是儲存的經緯度位置
     if (locationCache[endPointLocation]) {
         // 使用緩存的經緯度資料
         coordinates = locationCache[endPointLocation];
