@@ -1,4 +1,4 @@
-// 全局变量
+﻿// 全局变量
 let startingPoint = null;
 let destinations = [];
 let map = null;
@@ -651,38 +651,6 @@ function determineTransportation(coord1, coord2) {
     }
 }
 
-// 优化行程顺序（使用最近邻算法）
-function optimizeItinerary() {
-    if (destinations.length <= 1) {
-        return; // 不需要优化
-    }
-    
-    const optimizedDestinations = [destinations[0]]; // 从第一个景点开始
-    const remainingDestinations = [...destinations.slice(1)];
-    
-    while (remainingDestinations.length > 0) {
-        const lastPoint = optimizedDestinations[optimizedDestinations.length - 1];
-        let nearestIndex = 0;
-        let minDistance = calculateDistance(lastPoint.coordinates, remainingDestinations[0].coordinates);
-        
-        // 找到最近的下一个景点
-        for (let i = 1; i < remainingDestinations.length; i++) {
-            const distance = calculateDistance(lastPoint.coordinates, remainingDestinations[i].coordinates);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestIndex = i;
-            }
-        }
-        
-        // 添加到优化后的行程中
-        const nextDestination = remainingDestinations[nearestIndex];
-        optimizedDestinations.push(nextDestination);
-        remainingDestinations.splice(nearestIndex, 1);
-    }
-    
-    destinations = optimizedDestinations;
-}
-
 // 将行程分配到多天
 function distributeItineraryToDays() {
     if (!startingPoint || destinations.length === 0) {
@@ -988,14 +956,14 @@ function updateMap() {
     } else {
         // 一頁式模式：顯示所有景點
         console.log(`一頁式模式: 顯示所有 ${destinations.length} 個景點`);
-        
-        // 添加目的地标记
-        destinations.forEach((destination, index) => {
-            addMarker(destination.coordinates, `${index + 1}. ${destination.name}`, 'red');
-        });
-        
-        // 绘制路线
-        drawRoute();
+    
+    // 添加目的地标记
+    destinations.forEach((destination, index) => {
+        addMarker(destination.coordinates, `${index + 1}. ${destination.name}`, 'red');
+    });
+    
+    // 绘制路线
+    drawRoute();
     }
     
     // 调整地图视图以包含所有标记
@@ -1675,8 +1643,8 @@ function updateItinerary() {
         showDayByIndex(currentDayIndex);
     }
     
-    // 在函數結尾添加視圖模式初始化
-    initViewModeToggle();
+    // 在函數結尾重新初始化視圖模式
+    // initViewModeToggle(); // 移除重複調用
     reinitViewMode();
 }
 
@@ -2092,19 +2060,19 @@ function showTransportQueryDialog(defaultMode, defaultFrom, defaultTo, savedPref
             };
             
             localStorage.setItem('transportQueryPreferences', JSON.stringify(preferences));
-        }
-        
-        // 構建Google Maps URL
+    }
+    
+    // 構建Google Maps URL
         const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(customFrom)}&destination=${encodeURIComponent(customTo)}&travelmode=${googleMapsMode}`;
-        
+    
         // 關閉對話框
         document.body.removeChild(dialog);
         
         // 打開Google Maps
-        window.open(googleMapsUrl, '_blank');
-        
+    window.open(googleMapsUrl, '_blank');
+    
         console.log(`使用Google Maps查詢從 ${customFrom} 到 ${customTo} 的交通路線，交通方式: ${googleMapsMode}`);
-        console.log(`打開URL: ${googleMapsUrl}`);
+    console.log(`打開URL: ${googleMapsUrl}`);
     });
     
     // 取消按鈕點擊事件
@@ -3917,11 +3885,11 @@ async function addDestinationToSpecificDay(location, targetDayIndex) {
                 }
             }
         }
-        
-        // 更新地圖和行程
-        updateMap();
-        updateItinerary();
-        
+    
+    // 更新地圖和行程
+    updateMap();
+    updateItinerary();
+    
         // 保存當前狀態
         saveStateToHistory();
         
