@@ -1,4 +1,4 @@
-﻿// 全局变量
+// 全局变量
 let startingPoint = null;
 let destinations = [];
 let map = null;
@@ -2988,30 +2988,190 @@ function exportData() {
         exportDate: new Date().toISOString(),
         version: '1.0'
     };
-    
-    // 轉換為JSON字串
-    const dataStr = JSON.stringify(exportData, null, 2);
-    
-    // 建立下載用的blob與連結
-    const blob = new Blob([dataStr], { type: 'application/json' });
+
+    // 創建匯出格式選擇對話框
+    const formatDialog = document.createElement('div');
+    formatDialog.style.position = 'fixed';
+    formatDialog.style.top = '50%';
+    formatDialog.style.left = '50%';
+    formatDialog.style.transform = 'translate(-50%, -50%)';
+    formatDialog.style.backgroundColor = 'white';
+    formatDialog.style.padding = '20px';
+    formatDialog.style.border = '1px solid #ccc';
+    formatDialog.style.borderRadius = '5px';
+    formatDialog.style.zIndex = '1000';
+    formatDialog.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+
+    formatDialog.innerHTML = `
+        <h3 style="margin-top:0">選擇匯出格式</h3>
+        <div style="display:flex;flex-direction:column;gap:10px">
+            <button id="export-json" style="padding:8px">JSON格式</button>
+            <button id="export-html" style="padding:8px">HTML格式</button>
+            <button id="export-word" style="padding:8px">Word格式</button>
+            <button id="cancel-export" style="padding:8px;margin-top:10px">取消</button>
+        </div>
+    `;
+
+    document.body.appendChild(formatDialog);
+
+    // JSON格式匯出
+    document.getElementById('export-json').addEventListener('click', () => {
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        downloadFile(blob, `travel_planner_export_${new Date().toISOString().slice(0, 10)}.json`);
+        document.body.removeChild(formatDialog);
+    });
+
+    // HTML格式匯出
+    document.getElementById('export-html').addEventListener('click', () => {
+        const htmlContent = generateHTMLContent(exportData);
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        downloadFile(blob, `travel_planner_export_${new Date().toISOString().slice(0, 10)}.html`);
+        document.body.removeChild(formatDialog);
+    });
+
+    // Word格式匯出
+    document.getElementById('export-word').addEventListener('click', () => {
+        const wordContent = generateWordContent(exportData);
+        const blob = new Blob([wordContent], { type: 'text/html;charset=utf-8' });
+        downloadFile(blob, `travel_planner_export_${new Date().toISOString().slice(0, 10)}.doc`);
+        document.body.removeChild(formatDialog);
+    });
+
+    // 取消匯出
+    document.getElementById('cancel-export').addEventListener('click', () => {
+        document.body.removeChild(formatDialog);
+    });
+}
+
+// 下載檔案的通用函數
+function downloadFile(blob, filename) {
     const url = URL.createObjectURL(blob);
-    
-    // 建立下載連結
     const downloadLink = document.createElement('a');
     downloadLink.href = url;
-    downloadLink.download = `travel_planner_export_${new Date().toISOString().slice(0, 10)}.json`;
-    
-    // 觸發下載
+    downloadLink.download = filename;
     document.body.appendChild(downloadLink);
     downloadLink.click();
-    
-    // 清理
     setTimeout(() => {
         document.body.removeChild(downloadLink);
         URL.revokeObjectURL(url);
     }, 100);
-    
     alert('匯出成功！');
+}
+
+// 生成HTML內容
+function generateHTMLContent(data) {
+    const itineraries = data.savedItineraries;
+    let html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>旅行規劃匯出</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .itinerary { margin-bottom: 30px; border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
+                .day { margin-bottom: 20px; }
+                .destination { margin: 10px 0; padding-left: 20px; }
+                h1 { color: #2c3e50; }
+                h2 { color: #34495e; }
+                h3 { color: #7f8c8d; }
+            </style>
+        </head>
+        <body>
+            <h1>旅行規劃匯出</h1>
+            <p>匯出日期：${new Date(data.exportDate).toLocaleString()}</p>
+    `;
+
+    for (const [name, itinerary] of Object.entries(itineraries)) {
+        html += `
+            <div class="itinerary">
+                <h2>行程：${name}</h2>
+                <p>出發地點：${itinerary.startingPoint || '未設定'}</p>
+                <p>出發日期：${itinerary.departureDate || '未設定'}</p>
+        `;
+
+        if (itinerary.destinations && itinerary.destinations.length > 0) {
+            html += '<h3>目的地列表：</h3>';
+            itinerary.destinations.forEach((dest, index) => {
+                html += `
+                    <div class="destination">
+                        <p><strong>${index + 1}. ${dest.name}</strong></p>
+                        <p>停留時間：${dest.stayDuration} 小時</p>
+                        ${dest.coordinates ? `<p>座標：${dest.coordinates.join(', ')}</p>` : ''}
+                    </div>
+                `;
+            });
+        }
+
+        html += '</div>';
+    }
+
+    html += `
+        </body>
+        </html>
+    `;
+
+    return html;
+}
+
+// 生成Word內容
+function generateWordContent(data) {
+    const itineraries = data.savedItineraries;
+    let content = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>旅行規劃匯出</title>
+            <style>
+                body { font-family: "Microsoft JhengHei", Arial, sans-serif; margin: 2.54cm; line-height: 1.5; }
+                h1 { color: #2c3e50; font-size: 24pt; margin-bottom: 20pt; text-align: center; }
+                h2 { color: #34495e; font-size: 18pt; margin-top: 24pt; margin-bottom: 12pt; }
+                h3 { color: #7f8c8d; font-size: 14pt; margin-top: 18pt; margin-bottom: 9pt; }
+                p { margin: 6pt 0; }
+                .itinerary { margin-bottom: 24pt; page-break-inside: avoid; }
+                .destination { margin: 12pt 0; padding-left: 24pt; }
+                hr { border: none; border-top: 1pt solid #bdc3c7; margin: 24pt 0; }
+                .export-info { text-align: right; color: #7f8c8d; font-size: 10pt; margin-bottom: 24pt; }
+            </style>
+        </head>
+        <body>
+            <h1>旅行規劃匯出</h1>
+            <div class="export-info">匯出日期：${new Date(data.exportDate).toLocaleString()}</div>
+    `;
+
+
+    for (const [name, itinerary] of Object.entries(itineraries)) {
+        content += `
+            <div class="itinerary">
+                <h2>行程：${name}</h2>
+                <p><strong>出發地點：</strong>${itinerary.startingPoint || '未設定'}</p>
+                <p><strong>出發日期：</strong>${itinerary.departureDate || '未設定'}</p>
+        `;
+
+        if (itinerary.destinations && itinerary.destinations.length > 0) {
+            content += '<h3>目的地列表：</h3>';
+            itinerary.destinations.forEach((dest, index) => {
+                content += `
+                    <div class="destination">
+                        <p><strong>${index + 1}. ${dest.name}</strong></p>
+                        <p><strong>停留時間：</strong>${dest.stayDuration} 小時</p>
+                        ${dest.coordinates ? `<p><strong>座標：</strong>${dest.coordinates.join(', ')}</p>` : ''}
+                    </div>
+                `;
+            });
+        }
+
+        content += '<hr>';
+    }
+
+    content += `
+        </body>
+        </html>
+    `;
+
+    return content;
 }
 
 // 匯入行程與經緯度位置數據
@@ -4632,6 +4792,12 @@ function initViewModeToggle() {
         listBtn.classList.remove('active');
         itinerarySection.classList.add('paged-mode');
         
+        // 顯示行程概覽區塊
+        const summaryContainer = document.querySelector('.itinerary-summary');
+        if (summaryContainer) {
+            summaryContainer.style.display = 'block';
+        }
+        
         // 初始顯示第一天
         showDayByIndex(0);
         updatePagerControls();
@@ -4656,6 +4822,12 @@ function initViewModeToggle() {
         listBtn.classList.add('active');
         pageBtn.classList.remove('active');
         itinerarySection.classList.remove('paged-mode');
+        
+        // 隱藏行程概覽區塊
+        const summaryContainer = document.querySelector('.itinerary-summary');
+        if (summaryContainer) {
+            summaryContainer.style.display = 'none';
+        }
         
         // 顯示所有天數
         const dayCards = document.querySelectorAll('.day-card');
