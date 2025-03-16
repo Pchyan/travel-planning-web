@@ -3,6 +3,7 @@
  * 使用模組模式設計，確保良好的封裝和可維護性
  */
 
+
 const TravelRecord = (function() {
     // 私有變數
     let records = [];
