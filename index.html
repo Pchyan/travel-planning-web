@@ -5,19 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="旅遊規劃助手 - 輕鬆規劃您的旅遊行程，安排景點和交通方式">
     <meta name="theme-color" content="#4a89dc">
-    <title>旅遊規劃助手</title>
+    <title>旅行規劃助手</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- 針對行動裝置的圖示 -->
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/2161/2161423.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/2161/2161423.png">
+    <!-- 添加旅行記錄模組樣式 -->
+    <link rel="stylesheet" href="travel-record.css" />
+    <style>
+        /* 添加 .hidden 類 */
+        .hidden {
+            display: none !important;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>旅遊規劃助手</h1>
-            <div class="transport-note">輕鬆規劃您的旅遊行程</div>
+            <h1>旅行規劃助手</h1>
+            <!-- 移除頂部所有按鈕 -->
         </header>
         
         <main>
@@ -54,6 +62,8 @@
                     <button id="export-data"><i class="fas fa-file-export"></i> 匯出資料</button>
                     <button id="import-data"><i class="fas fa-file-import"></i> 匯入資料</button>
                     <button id="repair-data" title="修復或重置損壞的數據"><i class="fas fa-tools"></i> 修復數據</button>
+                    <!-- 在修復數據按鈕旁添加旅行記錄按鈕 -->
+                    <button id="open-travel-record" title="查看和管理您的旅行記錄"><i class="fas fa-book"></i> 旅行記錄</button>
                 </div>
                 
                 <div class="add-destination">
@@ -138,6 +148,8 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="transportationSystems.js"></script>
     <script src="app.js"></script>
+    <!-- 添加旅行記錄模組腳本 -->
+    <script src="travel-record.js"></script>
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
