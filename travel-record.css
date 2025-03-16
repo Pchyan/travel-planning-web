@@ -698,4 +698,115 @@
 .records-actions .action-btn i {
     font-size: 14px;
     color: #4a89dc;
+}
+
+/* 匯出選擇對話框樣式 */
+.export-dialog-content {
+    padding: 20px;
+    overflow-y: auto;
+    max-height: calc(90vh - 130px);
+}
+
+.dialog-instruction {
+    margin-bottom: 15px;
+    color: #666;
+    font-size: 15px;
+}
+
+.selection-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.records-selection-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 5px;
+    margin-bottom: 20px;
+}
+
+.selection-item {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s;
+}
+
+.selection-item:last-child {
+    border-bottom: none;
+}
+
+.selection-item:hover {
+    background-color: #f5f9ff;
+}
+
+.selection-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.selection-preview {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+}
+
+.selection-thumbnail {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.no-photo-small {
+    width: 50px;
+    height: 50px;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    font-size: 18px;
+}
+
+.selection-info {
+    flex: 1;
+}
+
+.selection-title {
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 3px;
+}
+
+.selection-date {
+    font-size: 12px;
+    color: #888;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+/* 響應式調整 */
+@media (max-width: 768px) {
+    .records-selection-list {
+        max-height: 300px;
+    }
+    
+    .selection-thumbnail, .no-photo-small {
+        width: 40px;
+        height: 40px;
+    }
 } 

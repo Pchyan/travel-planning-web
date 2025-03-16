@@ -24,6 +24,9 @@ const TravelRecord = (function() {
             // 如果DOM已經載入完成，直接設置事件
             setupEventListeners();
         }
+        
+        // 動態載入Word匯出所需的庫
+        loadDependencies();
     }
     
     function loadRecordsFromStorage() {
@@ -96,6 +99,121 @@ const TravelRecord = (function() {
         }, 500); // 延遲500毫秒確保DOM加載完成
     }
     
+    // 添加載入Word匯出依賴庫的函數
+    function loadDependencies() {
+        console.log('載入Word匯出所需的庫...');
+        
+        // 添加狀態追蹤變數
+        window.wordExportDependenciesLoaded = false;
+        window.wordExportDependenciesLoading = true;
+        
+        // 檢查html-docx-js
+        let htmlDocxLoaded = false;
+        let fileSaverLoaded = false;
+        
+        // 嘗試從多個CDN加載html-docx-js
+        function loadHtmlDocx() {
+            if (typeof window.htmlDocx !== 'undefined') {
+                console.log('html-docx-js庫已成功載入');
+                htmlDocxLoaded = true;
+                checkAllLoaded();
+                return;
+            }
+            
+            const script = document.createElement('script');
+            script.onload = () => {
+                console.log('html-docx-js庫已成功載入');
+                htmlDocxLoaded = true;
+                checkAllLoaded();
+            };
+            script.onerror = () => {
+                console.error('無法從CDN載入html-docx-js庫，嘗試備用來源');
+                // 嘗試備用CDN
+                const backupScript = document.createElement('script');
+                backupScript.src = 'https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.min.js';
+                backupScript.async = true;
+                backupScript.onload = () => {
+                    console.log('html-docx-js庫已從備用來源成功載入');
+                    htmlDocxLoaded = true;
+                    checkAllLoaded();
+                };
+                backupScript.onerror = () => {
+                    console.error('所有來源都無法載入html-docx-js庫');
+                    window.wordExportDependenciesLoading = false;
+                };
+                document.head.appendChild(backupScript);
+            };
+            script.src = 'https://unpkg.com/html-docx-js/dist/html-docx.min.js';
+            script.async = true;
+            document.head.appendChild(script);
+        }
+        
+        // 嘗試從多個CDN加載FileSaver.js
+        function loadFileSaver() {
+            if (typeof window.saveAs !== 'undefined') {
+                console.log('FileSaver.js庫已成功載入');
+                fileSaverLoaded = true;
+                checkAllLoaded();
+                return;
+            }
+            
+            const script = document.createElement('script');
+            script.onload = () => {
+                console.log('FileSaver.js庫已成功載入');
+                fileSaverLoaded = true;
+                checkAllLoaded();
+            };
+            script.onerror = () => {
+                console.error('無法從CDN載入FileSaver.js庫，嘗試備用來源');
+                // 嘗試備用CDN
+                const backupScript = document.createElement('script');
+                backupScript.src = 'https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js';
+                backupScript.async = true;
+                backupScript.onload = () => {
+                    console.log('FileSaver.js庫已從備用來源成功載入');
+                    fileSaverLoaded = true;
+                    checkAllLoaded();
+                };
+                backupScript.onerror = () => {
+                    console.error('所有來源都無法載入FileSaver.js庫');
+                    window.wordExportDependenciesLoading = false;
+                };
+                document.head.appendChild(backupScript);
+            };
+            script.src = 'https://unpkg.com/file-saver/dist/FileSaver.min.js';
+            script.async = true;
+            document.head.appendChild(script);
+        }
+        
+        // 檢查是否所有依賴項都已加載
+        function checkAllLoaded() {
+            if (htmlDocxLoaded && fileSaverLoaded) {
+                console.log('所有Word匯出所需的庫已成功載入，功能準備就緒');
+                window.wordExportDependenciesLoaded = true;
+                window.wordExportDependenciesLoading = false;
+                
+                // 如果有待處理的匯出操作，現在執行它
+                if (window.pendingExportIndices) {
+                    console.log('執行待處理的匯出操作');
+                    generateWordDocument(window.pendingExportIndices);
+                    window.pendingExportIndices = null;
+                }
+            }
+        }
+        
+        // 開始加載兩個庫
+        loadHtmlDocx();
+        loadFileSaver();
+        
+        // 設置超時檢查，確保加載過程不會無限期卡住
+        setTimeout(() => {
+            if (!window.wordExportDependenciesLoaded && window.wordExportDependenciesLoading) {
+                console.warn('庫載入超時，載入過程可能卡住');
+                window.wordExportDependenciesLoading = false;
+            }
+        }, 20000); // 20秒超時
+    }
+    
     // 顯示旅行記錄面板
     function openRecordPanel() {
         console.log('打開旅行記錄面板');
@@ -124,7 +242,10 @@ const TravelRecord = (function() {
             <div id="records-list-container" class="tab-content active">
                 <div class="records-actions">
                     <button id="export-records-btn" class="action-btn" title="將記錄匯出為檔案">
-                        <i class="fas fa-file-export"></i> 匯出記錄
+                        <i class="fas fa-file-export"></i> 匯出JSON
+                    </button>
+                    <button id="export-records-word-btn" class="action-btn" title="將記錄匯出為Word檔案">
+                        <i class="fas fa-file-word"></i> 匯出Word
                     </button>
                     <button id="import-records-btn" class="action-btn" title="從檔案匯入記錄">
                         <i class="fas fa-file-import"></i> 匯入記錄
@@ -208,6 +329,9 @@ const TravelRecord = (function() {
         
         // 添加匯出記錄按鈕事件
         document.getElementById('export-records-btn').addEventListener('click', exportRecords);
+        
+        // 添加匯出Word記錄按鈕事件
+        document.getElementById('export-records-word-btn').addEventListener('click', exportRecordsToWord);
         
         // 添加匯入記錄按鈕事件
         document.getElementById('import-records-btn').addEventListener('click', importRecords);
@@ -1012,6 +1136,466 @@ const TravelRecord = (function() {
             // 顯示成功消息
             alert('記錄已成功更新！');
         });
+    }
+    
+    // 添加匯出為Word的功能
+    function exportRecordsToWord() {
+        if (records.length === 0) {
+            alert('沒有可匯出的旅行記錄');
+            return;
+        }
+        
+        // 創建選擇對話框
+        showExportSelectionDialog();
+    }
+    
+    // 顯示匯出選擇對話框
+    function showExportSelectionDialog() {
+        // 移除已存在的對話框（如果有）
+        const existingDialog = document.getElementById('export-selection-dialog');
+        if (existingDialog) {
+            existingDialog.remove();
+        }
+        
+        // 創建對話框
+        const dialog = document.createElement('div');
+        dialog.id = 'export-selection-dialog';
+        dialog.className = 'record-panel';
+        dialog.style.zIndex = '1200';
+        
+        // 生成記錄選擇列表的HTML
+        let recordsOptionsHtml = '';
+        records.forEach((record, index) => {
+            // 獲取第一張照片或使用默認圖標
+            const hasPhotos = record.photos && record.photos.length > 0;
+            const photoHtml = hasPhotos ? 
+                `<img src="${record.photos[0]}" alt="${record.title}" class="selection-thumbnail">` : 
+                `<div class="no-photo-small"><i class="fas fa-image"></i></div>`;
+            
+            recordsOptionsHtml += `
+                <div class="selection-item">
+                    <label class="selection-label">
+                        <input type="checkbox" class="record-selection" value="${index}" checked>
+                        <div class="selection-preview">
+                            ${photoHtml}
+                            <div class="selection-info">
+                                <div class="selection-title">${record.title || '未命名記錄'}</div>
+                                <div class="selection-date">${formatDate(record.date)}</div>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            `;
+        });
+        
+        // 設置對話框內容
+        dialog.innerHTML = `
+            <div class="record-panel-header">
+                <h2>選擇要匯出的記錄</h2>
+                <button id="close-export-dialog" class="close-btn">&times;</button>
+            </div>
+            <div class="export-dialog-content">
+                <p class="dialog-instruction">請選擇您想要匯出到Word檔案的旅行記錄：</p>
+                
+                <div class="selection-actions">
+                    <button id="select-all-records" class="secondary-btn">全選</button>
+                    <button id="deselect-all-records" class="secondary-btn">取消全選</button>
+                </div>
+                
+                <div class="records-selection-list">
+                    ${recordsOptionsHtml}
+                </div>
+                
+                <div class="dialog-footer">
+                    <button id="export-selected-word" class="primary-btn">匯出選定記錄</button>
+                    <button id="cancel-export-dialog" class="secondary-btn">取消</button>
+                </div>
+            </div>
+        `;
+        
+        // 添加到頁面
+        document.body.appendChild(dialog);
+        
+        // 添加事件監聽器
+        document.getElementById('close-export-dialog').addEventListener('click', () => {
+            dialog.remove();
+        });
+        
+        document.getElementById('cancel-export-dialog').addEventListener('click', () => {
+            dialog.remove();
+        });
+        
+        document.getElementById('select-all-records').addEventListener('click', () => {
+            const checkboxes = dialog.querySelectorAll('.record-selection');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+        });
+        
+        document.getElementById('deselect-all-records').addEventListener('click', () => {
+            const checkboxes = dialog.querySelectorAll('.record-selection');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        });
+        
+        document.getElementById('export-selected-word').addEventListener('click', () => {
+            // 獲取選中的記錄索引
+            const selectedIndices = [];
+            const checkboxes = dialog.querySelectorAll('.record-selection');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedIndices.push(parseInt(checkbox.value));
+                }
+            });
+            
+            if (selectedIndices.length === 0) {
+                alert('請至少選擇一條記錄');
+                return;
+            }
+            
+            // 關閉對話框
+            dialog.remove();
+            
+            // 匯出選中的記錄
+            generateWordDocument(selectedIndices);
+        });
+    }
+    
+    // 生成Word文檔
+    function generateWordDocument(selectedIndices) {
+        // 檢查依賴庫是否已經載入
+        if (typeof window.htmlDocx === 'undefined' || typeof window.saveAs === 'undefined') {
+            console.error('匯出Word所需的庫尚未載入');
+            
+            // 如果庫正在加載，保存請求以便稍後處理
+            if (window.wordExportDependenciesLoading) {
+                console.log('庫正在加載中，保存匯出請求，稍後處理');
+                window.pendingExportIndices = selectedIndices;
+                
+                // 顯示載入中提示
+                const loadingMessage = document.createElement('div');
+                loadingMessage.id = 'word-export-loading';
+                loadingMessage.style.position = 'fixed';
+                loadingMessage.style.top = '50%';
+                loadingMessage.style.left = '50%';
+                loadingMessage.style.transform = 'translate(-50%, -50%)';
+                loadingMessage.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+                loadingMessage.style.color = 'white';
+                loadingMessage.style.padding = '20px';
+                loadingMessage.style.borderRadius = '5px';
+                loadingMessage.style.zIndex = '9999';
+                loadingMessage.innerHTML = '正在準備Word匯出功能，請稍候...';
+                document.body.appendChild(loadingMessage);
+                
+                // 10秒後如果還沒完成，顯示提示並移除載入提示
+                setTimeout(() => {
+                    if (!window.wordExportDependenciesLoaded) {
+                        const loadingEl = document.getElementById('word-export-loading');
+                        if (loadingEl) {
+                            loadingEl.remove();
+                        }
+                        
+                        // 提供備用選項
+                        if (confirm('無法載入Word匯出功能，是否要使用備用方案匯出HTML格式？')) {
+                            exportAsHTML(selectedIndices);
+                        } else {
+                            alert('匯出已取消。您可以稍後再試，或檢查網絡連接。');
+                        }
+                        window.pendingExportIndices = null;
+                    }
+                }, 10000);
+                
+                return;
+            }
+            
+            // 如果庫未在加載，嘗試重新加載
+            console.log('嘗試重新載入所需的庫...');
+            loadDependencies();
+            
+            if (confirm('匯出Word功能尚未準備好，是否要使用備用方案匯出HTML格式？')) {
+                exportAsHTML(selectedIndices);
+            } else {
+                alert('系統正在嘗試載入必要元件，請稍後再試');
+            }
+            return;
+        }
+        
+        try {
+            // 篩選選中的記錄
+            const selectedRecords = selectedIndices.map(index => records[index]);
+            
+            // 創建HTML內容
+            let htmlContent = generateHTMLContent(selectedRecords);
+            
+            console.log('生成Word檔案的HTML已準備好');
+            
+            // 在轉換前顯示載入中提示
+            const loadingMessage = document.createElement('div');
+            loadingMessage.style.position = 'fixed';
+            loadingMessage.style.top = '50%';
+            loadingMessage.style.left = '50%';
+            loadingMessage.style.transform = 'translate(-50%, -50%)';
+            loadingMessage.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            loadingMessage.style.color = 'white';
+            loadingMessage.style.padding = '20px';
+            loadingMessage.style.borderRadius = '5px';
+            loadingMessage.style.zIndex = '9999';
+            loadingMessage.innerHTML = '正在生成Word文件，請稍候...';
+            document.body.appendChild(loadingMessage);
+            
+            // 使用setTimeout來確保UI更新
+            setTimeout(() => {
+                try {
+                    // 轉換為Word檔案
+                    const converted = window.htmlDocx.asBlob(htmlContent, {
+                        orientation: 'portrait',
+                        margins: {
+                            top: 1440,   // 上邊距 (1英吋 = 1440)
+                            right: 1440, // 右邊距
+                            bottom: 1440, // 下邊距
+                            left: 1440,  // 左邊距
+                            header: 720,  // 頁首
+                            footer: 720   // 頁尾
+                        }
+                    });
+                    
+                    // 設置檔案名稱
+                    const now = new Date();
+                    const dateStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+                    const fileName = `旅行記錄-${dateStr}.docx`;
+                    
+                    // 下載檔案
+                    window.saveAs(converted, fileName);
+                    
+                    // 移除載入中提示
+                    document.body.removeChild(loadingMessage);
+                    
+                    alert('旅行記錄已成功匯出為Word檔案');
+                } catch (error) {
+                    // 移除載入中提示
+                    document.body.removeChild(loadingMessage);
+                    console.error('匯出Word檔案時出錯:', error);
+                    
+                    // 提供備用選項
+                    if (confirm('生成Word檔案時出錯，是否要使用備用方案匯出HTML格式？')) {
+                        exportAsHTML(selectedIndices);
+                    } else {
+                        alert('匯出Word檔案時發生錯誤: ' + (error.message || '未知錯誤') + '\n請稍後再試');
+                    }
+                }
+            }, 100);
+        } catch (error) {
+            console.error('準備匯出Word檔案時出錯:', error);
+            
+            // 提供備用選項
+            if (confirm('準備匯出時出錯，是否要使用備用方案匯出HTML格式？')) {
+                exportAsHTML(selectedIndices);
+            } else {
+                alert('準備匯出Word檔案時發生錯誤: ' + (error.message || '未知錯誤') + '\n請稍後再試');
+            }
+        }
+    }
+    
+    // 生成HTML內容
+    function generateHTMLContent(selectedRecords) {
+        // 創建HTML內容
+        let htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>旅行記錄匯出</title>
+                <style>
+                    body {
+                        font-family: "微軟正黑體", "Microsoft JhengHei", Arial, sans-serif;
+                        line-height: 1.6;
+                        color: #333;
+                        padding: 20px;
+                    }
+                    .record {
+                        margin-bottom: 40px;
+                        border-bottom: 1px solid #eaeaea;
+                        padding-bottom: 30px;
+                    }
+                    .record:last-child {
+                        border-bottom: none;
+                    }
+                    .record-title {
+                        font-size: 24px;
+                        color: #4a89dc;
+                        margin-bottom: 10px;
+                        font-weight: bold;
+                    }
+                    .record-date {
+                        font-size: 14px;
+                        color: #666;
+                        margin-bottom: 15px;
+                    }
+                    .record-description {
+                        font-size: 16px;
+                        line-height: 1.6;
+                        margin-bottom: 20px;
+                        text-align: justify;
+                    }
+                    .record-photos {
+                        margin-top: 20px;
+                    }
+                    .photo-container {
+                        break-inside: avoid;
+                        margin-bottom: 20px;
+                    }
+                    .record-photo {
+                        max-width: 100%;
+                        display: block;
+                        margin-bottom: 8px;
+                    }
+                    .record-photo img {
+                        max-width: 100%;
+                        height: auto;
+                        display: block;
+                        margin: 0 auto;
+                    }
+                    .photo-caption {
+                        font-size: 12px;
+                        color: #666;
+                        text-align: center;
+                        margin-top: 5px;
+                    }
+                    h1.document-title {
+                        text-align: center;
+                        color: #4a89dc;
+                        margin: 20px 0 40px 0;
+                        font-size: 28px;
+                        border-bottom: 2px solid #4a89dc;
+                        padding-bottom: 10px;
+                    }
+                    .page-break {
+                        page-break-after: always;
+                    }
+                    .header-info {
+                        text-align: right;
+                        color: #888;
+                        font-size: 12px;
+                        margin-bottom: 30px;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1 class="document-title">我的旅行記錄</h1>
+                <div class="header-info">
+                    匯出日期: ${formatDate(new Date().toISOString().slice(0, 10))}
+                </div>
+        `;
+        
+        // 添加每條記錄
+        selectedRecords.forEach((record, index) => {
+            htmlContent += `
+                <div class="record">
+                    <div class="record-title">${record.title || '未命名記錄'}</div>
+                    <div class="record-date">旅行日期: ${formatDate(record.date)}</div>
+                    <div class="record-description">${record.description || '沒有描述'}</div>
+            `;
+            
+            // 添加照片（優化照片處理方式）
+            if (record.photos && record.photos.length > 0) {
+                htmlContent += `<div class="record-photos">`;
+                
+                // 限制每個記錄的照片數量，避免文件過大
+                const maxPhotos = 10;
+                const photos = record.photos.slice(0, maxPhotos);
+                
+                photos.forEach((photo, photoIndex) => {
+                    // 確保照片URL有效
+                    let photoSrc = photo;
+                    
+                    // 安全地處理照片URL
+                    if (!photoSrc || (!photoSrc.startsWith('data:image/') && !photoSrc.startsWith('http'))) {
+                        console.warn(`跳過無效照片URL: ${photoSrc && photoSrc.substring(0, 30)}...`);
+                        return;
+                    }
+                    
+                    try {
+                        // 確保資料URL不超過一定長度，避免Word生成問題
+                        if (photoSrc.startsWith('data:image/') && photoSrc.length > 500000) {
+                            console.warn(`照片 ${photoIndex + 1} 資料過大，嘗試壓縮`);
+                            // 這裡可以添加壓縮邏輯，但目前只是記錄警告
+                        }
+                        
+                        htmlContent += `
+                            <div class="photo-container">
+                                <div class="record-photo">
+                                    <img src="${photoSrc}" alt="${record.title}的照片 ${photoIndex + 1}">
+                                </div>
+                                <div class="photo-caption">${record.title}的照片 ${photoIndex + 1}</div>
+                            </div>
+                        `;
+                    } catch (photoError) {
+                        console.error(`處理照片 ${photoIndex + 1} 時出錯:`, photoError);
+                    }
+                });
+                
+                if (record.photos.length > maxPhotos) {
+                    htmlContent += `
+                        <div class="photo-container">
+                            <div class="photo-caption">還有 ${record.photos.length - maxPhotos} 張照片未顯示</div>
+                        </div>
+                    `;
+                }
+                
+                htmlContent += `</div>`;
+            }
+            
+            htmlContent += `</div>`;
+            
+            // 添加分頁符(除了最後一條記錄)
+            if (index < selectedRecords.length - 1) {
+                htmlContent += `<div class="page-break"></div>`;
+            }
+        });
+        
+        htmlContent += `
+            </body>
+            </html>
+        `;
+        
+        return htmlContent;
+    }
+    
+    // 備用方案：匯出為HTML檔案
+    function exportAsHTML(selectedIndices) {
+        try {
+            // 篩選選中的記錄
+            const selectedRecords = selectedIndices.map(index => records[index]);
+            
+            // 創建HTML內容
+            let htmlContent = generateHTMLContent(selectedRecords);
+            
+            // 創建Blob對象
+            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+            
+            // 創建下載連結
+            const downloadLink = document.createElement('a');
+            downloadLink.href = URL.createObjectURL(blob);
+            
+            // 設置檔案名稱
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+            downloadLink.download = `旅行記錄-${dateStr}.html`;
+            
+            // 添加到頁面並模擬點擊
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            
+            // 清理
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(downloadLink.href);
+            
+            alert('旅行記錄已成功匯出為HTML檔案。\n注意：此為備用格式，您可以用瀏覽器開啟此檔案查看，或複製內容到Word中。');
+        } catch (error) {
+            console.error('匯出HTML檔案時出錯:', error);
+            alert('匯出HTML檔案時發生錯誤: ' + (error.message || '未知錯誤'));
+        }
     }
     
     // 公共API
