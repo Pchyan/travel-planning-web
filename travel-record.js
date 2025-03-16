@@ -273,7 +273,52 @@ const TravelRecord = (function() {
                     </div>
                     <div class="form-group">
                         <label for="record-description">旅行描述</label>
-                        <textarea id="record-description" rows="4" placeholder="分享您的旅行體驗..."></textarea>
+                        <div class="rich-text-editor-container">
+                            <div class="rich-text-toolbar">
+                                <!-- 字體相關選項分組 -->
+                                <div class="toolbar-group">
+                                    <select class="toolbar-item font-family" title="選擇字型">
+                                        <option value="inherit">預設字型</option>
+                                        <option value="'微軟正黑體', 'Microsoft JhengHei'">微軟正黑體</option>
+                                        <option value="'新細明體', 'PMingLiU'">新細明體</option>
+                                        <option value="'標楷體', 'DFKai-SB'">標楷體</option>
+                                        <option value="Arial, sans-serif">Arial</option>
+                                        <option value="'Times New Roman', serif">Times New Roman</option>
+                                    </select>
+                                    <select class="toolbar-item font-size" title="選擇字體大小">
+                                        <option value="1">小</option>
+                                        <option value="2">正常</option>
+                                        <option value="3">中</option>
+                                        <option value="4">大</option>
+                                        <option value="5">較大</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- 文字樣式分組 -->
+                                <div class="toolbar-group">
+                                    <button type="button" class="toolbar-item" data-command="bold" title="粗體 (Ctrl+B)"><i class="fas fa-bold"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="italic" title="斜體 (Ctrl+I)"><i class="fas fa-italic"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="underline" title="底線 (Ctrl+U)"><i class="fas fa-underline"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="foreColor" data-value="#000000" title="文字顏色"><i class="fas fa-font"></i></button>
+                                    <input type="color" class="color-picker" value="#000000" title="選擇顏色">
+                                </div>
+                                
+                                <!-- 對齊方式分組 -->
+                                <div class="toolbar-group">
+                                    <button type="button" class="toolbar-item" data-command="justifyLeft" title="靠左對齊"><i class="fas fa-align-left"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="justifyCenter" title="置中對齊"><i class="fas fa-align-center"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="justifyRight" title="靠右對齊"><i class="fas fa-align-right"></i></button>
+                                </div>
+                                
+                                <!-- 列表分組 -->
+                                <div class="toolbar-group">
+                                    <button type="button" class="toolbar-item" data-command="insertUnorderedList" title="項目符號清單"><i class="fas fa-list-ul"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="insertOrderedList" title="編號清單"><i class="fas fa-list-ol"></i></button>
+                                </div>
+                            </div>
+                            <div id="record-description" class="rich-text-editor" contenteditable="true"></div>
+                            <input type="hidden" id="record-description-html">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="record-photos">上傳照片</label>
@@ -304,6 +349,9 @@ const TravelRecord = (function() {
                 panelEl.style.display = 'flex';
                 panelEl.style.zIndex = '1000';
             }
+            
+            // 初始化富文本編輯器
+            initRichTextEditor();
         }, 0);
         
         // 添加事件監聽器
@@ -317,6 +365,8 @@ const TravelRecord = (function() {
         
         document.getElementById('create-record-tab').addEventListener('click', () => {
             showTab('create-record-container');
+            // 確保切換到創建標籤頁時初始化富文本編輯器
+            setTimeout(initRichTextEditor, 0);
         });
         
         document.getElementById('record-photos').addEventListener('change', handlePhotoUpload);
@@ -387,6 +437,17 @@ const TravelRecord = (function() {
                 `<img src="${record.photos[0]}" alt="${record.title}" class="record-thumbnail">` : 
                 `<div class="no-photo"><i class="fas fa-image"></i></div>`;
             
+            // 使用div顯示HTML格式的描述，但限制長度
+            let description = record.description || '沒有描述';
+            // 移除HTML標籤以計算文字長度，並截斷過長的描述
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = description;
+            const textContent = tempDiv.textContent || tempDiv.innerText || '';
+            if (textContent.length > 150) {
+                // 顯示截斷的描述文字，保留原HTML格式
+                description = `<div class="truncated-description">${description}</div>`;
+            }
+            
             return `
                 <div class="record-item" data-index="${index}">
                     <div class="record-preview">
@@ -394,7 +455,7 @@ const TravelRecord = (function() {
                         <div class="record-info">
                             <h3>${record.title}</h3>
                             <div class="record-date">${formatDate(record.date)}</div>
-                            <div class="record-description">${record.description || '沒有描述'}</div>
+                            <div class="record-description">${description}</div>
                         </div>
                     </div>
                     <div class="record-actions">
@@ -499,7 +560,7 @@ const TravelRecord = (function() {
     function saveNewRecord() {
         const titleInput = document.getElementById('record-title');
         const dateInput = document.getElementById('record-date');
-        const descriptionInput = document.getElementById('record-description');
+        const descriptionEditor = document.getElementById('record-description');
         const photosInput = document.getElementById('record-photos');
         const linkItineraryCheck = document.getElementById('link-itinerary');
         
@@ -528,12 +589,15 @@ const TravelRecord = (function() {
         
         console.log('有效照片數量:', photos.length);
         
+        // 獲取富文本編輯器的HTML內容
+        const description = descriptionEditor.innerHTML;
+        
         // 創建新記錄
         const newRecord = {
             id: Date.now().toString(),
             title: titleInput.value.trim(),
             date: dateInput.value,
-            description: descriptionInput.value.trim(),
+            description: description,
             photos: photos,
             createdAt: new Date().toISOString(),
             linkedItinerary: linkItineraryCheck.checked ? getCurrentItinerary() : null
@@ -554,6 +618,7 @@ const TravelRecord = (function() {
         
         // 重置表單
         document.getElementById('record-form').reset();
+        document.getElementById('record-description').innerHTML = '';
         document.getElementById('photo-preview').innerHTML = '';
         
         // 隱藏空記錄提示
@@ -617,7 +682,7 @@ const TravelRecord = (function() {
             photosHtml = `<div class="no-photos">沒有照片</div>`;
         }
         
-        // 構建詳情內容
+        // 構建詳情內容，直接顯示HTML格式的旅行描述
         detailPanel.innerHTML = `
             <div class="detail-panel-header">
                 <h2>${currentRecord.title || '未命名記錄'}</h2>
@@ -629,7 +694,7 @@ const TravelRecord = (function() {
                     <div class="detail-date">旅行日期: ${formatDate(currentRecord.date)}</div>
                     <div class="detail-description">
                         <h3>旅行描述</h3>
-                        <p>${currentRecord.description || '沒有描述'}</p>
+                        <div class="formatted-description">${currentRecord.description || '沒有描述'}</div>
                     </div>
                     ${currentRecord.linkedItinerary ? `
                         <div class="linked-itinerary">
@@ -962,7 +1027,7 @@ const TravelRecord = (function() {
         panel.id = 'edit-record-panel';
         panel.className = 'record-panel';
         
-        // 設置編輯面板內容
+        // 設置編輯面板內容，添加富文本編輯器
         panel.innerHTML = `
             <div class="record-panel-header">
                 <h2>編輯旅行記錄</h2>
@@ -980,7 +1045,52 @@ const TravelRecord = (function() {
                     </div>
                     <div class="form-group">
                         <label for="edit-description">旅行描述</label>
-                        <textarea id="edit-description" rows="4">${recordToEdit.description || ''}</textarea>
+                        <div class="rich-text-editor-container">
+                            <div class="rich-text-toolbar">
+                                <!-- 字體相關選項分組 -->
+                                <div class="toolbar-group">
+                                    <select class="toolbar-item font-family" title="選擇字型">
+                                        <option value="inherit">預設字型</option>
+                                        <option value="'微軟正黑體', 'Microsoft JhengHei'">微軟正黑體</option>
+                                        <option value="'新細明體', 'PMingLiU'">新細明體</option>
+                                        <option value="'標楷體', 'DFKai-SB'">標楷體</option>
+                                        <option value="Arial, sans-serif">Arial</option>
+                                        <option value="'Times New Roman', serif">Times New Roman</option>
+                                    </select>
+                                    <select class="toolbar-item font-size" title="選擇字體大小">
+                                        <option value="1">小</option>
+                                        <option value="2">正常</option>
+                                        <option value="3">中</option>
+                                        <option value="4">大</option>
+                                        <option value="5">較大</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- 文字樣式分組 -->
+                                <div class="toolbar-group">
+                                    <button type="button" class="toolbar-item" data-command="bold" title="粗體 (Ctrl+B)"><i class="fas fa-bold"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="italic" title="斜體 (Ctrl+I)"><i class="fas fa-italic"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="underline" title="底線 (Ctrl+U)"><i class="fas fa-underline"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="foreColor" data-value="#000000" title="文字顏色"><i class="fas fa-font"></i></button>
+                                    <input type="color" class="color-picker" value="#000000" title="選擇顏色">
+                                </div>
+                                
+                                <!-- 對齊方式分組 -->
+                                <div class="toolbar-group">
+                                    <button type="button" class="toolbar-item" data-command="justifyLeft" title="靠左對齊"><i class="fas fa-align-left"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="justifyCenter" title="置中對齊"><i class="fas fa-align-center"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="justifyRight" title="靠右對齊"><i class="fas fa-align-right"></i></button>
+                                </div>
+                                
+                                <!-- 列表分組 -->
+                                <div class="toolbar-group">
+                                    <button type="button" class="toolbar-item" data-command="insertUnorderedList" title="項目符號清單"><i class="fas fa-list-ul"></i></button>
+                                    <button type="button" class="toolbar-item" data-command="insertOrderedList" title="編號清單"><i class="fas fa-list-ol"></i></button>
+                                </div>
+                            </div>
+                            <div id="edit-description" class="rich-text-editor" contenteditable="true"></div>
+                            <input type="hidden" id="edit-description-html">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="edit-photos">上傳新照片</label>
@@ -1007,10 +1117,76 @@ const TravelRecord = (function() {
         // 添加面板到頁面
         document.body.appendChild(panel);
         
-        // 確保添加初始樣式，使面板可見
+        // 初始化富文本編輯器
         setTimeout(() => {
+            // 確保添加初始樣式，使面板可見
             panel.style.display = 'flex';
             panel.style.zIndex = '1000';
+            
+            // 初始化富文本編輯器
+            const editor = document.getElementById('edit-description');
+            const toolbar = panel.querySelector('.rich-text-toolbar');
+            const hiddenInput = document.getElementById('edit-description-html');
+            
+            if (editor && toolbar) {
+                // 設置編輯器初始內容為記錄的描述
+                editor.innerHTML = recordToEdit.description || '';
+                
+                // 監聽編輯器內容變化，更新隱藏的input
+                editor.addEventListener('input', function() {
+                    if (hiddenInput) hiddenInput.value = editor.innerHTML;
+                });
+                
+                // 為工具欄按鈕添加事件
+                toolbar.querySelectorAll('button.toolbar-item').forEach(button => {
+                    button.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const command = this.dataset.command;
+                        
+                        // 切換按鈕的激活狀態 (適用於開關式功能)
+                        if (['bold', 'italic', 'underline'].includes(command)) {
+                            this.classList.toggle('active');
+                        }
+                        
+                        if (command === 'foreColor') {
+                            const colorPicker = toolbar.querySelector('.color-picker');
+                            document.execCommand(command, false, colorPicker.value);
+                        } else if (this.dataset.value) {
+                            document.execCommand(command, false, this.dataset.value);
+                        } else {
+                            document.execCommand(command, false, null);
+                        }
+                        
+                        editor.focus();
+                    });
+                });
+                
+                // 字體下拉選單
+                toolbar.querySelector('.font-family').addEventListener('change', function() {
+                    document.execCommand('fontName', false, this.value);
+                    editor.focus();
+                });
+                
+                // 字體大小下拉選單
+                toolbar.querySelector('.font-size').addEventListener('change', function() {
+                    document.execCommand('fontSize', false, this.value);
+                    editor.focus();
+                });
+                
+                // 顏色選擇器
+                const colorPicker = toolbar.querySelector('.color-picker');
+                colorPicker.addEventListener('input', function() {
+                    const colorButton = toolbar.querySelector('[data-command="foreColor"]');
+                    colorButton.dataset.value = this.value;
+                    document.execCommand('foreColor', false, this.value);
+                    editor.focus();
+                });
+                
+                // 點擊顏色按鈕時打開顏色選擇器
+                toolbar.querySelector('[data-command="foreColor"]').addEventListener('click', function() {
+                    colorPicker.click();
+                });
+            }
         }, 0);
         
         // 添加關閉按鈕事件
@@ -1079,8 +1255,11 @@ const TravelRecord = (function() {
             // 獲取表單數據
             const title = document.getElementById('edit-title').value.trim();
             const date = document.getElementById('edit-date').value;
-            const description = document.getElementById('edit-description').value.trim();
+            const descriptionEditor = document.getElementById('edit-description');
             const linkItinerary = document.getElementById('edit-link-itinerary').checked;
+            
+            // 獲取富文本編輯器的HTML內容
+            const description = descriptionEditor.innerHTML;
             
             // 收集所有照片（保持現有順序）
             const photos = [];
@@ -1794,3 +1973,148 @@ const TravelRecord = (function() {
 
 // 確保模組在全局範圍可用
 window.TravelRecord = TravelRecord; 
+
+// 載入富文本編輯器功能腳本
+function loadRichTextEditorScript() {
+    if (window.richTextEditorLoaded) return;
+    
+    console.log('載入富文本編輯器相關資源...');
+    
+    // 添加字體圖標庫（如果尚未載入）
+    if (!document.querySelector('link[href*="font-awesome"]')) {
+        const fontAwesome = document.createElement('link');
+        fontAwesome.rel = 'stylesheet';
+        fontAwesome.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css';
+        fontAwesome.integrity = 'sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ==';
+        fontAwesome.crossOrigin = 'anonymous';
+        fontAwesome.referrerPolicy = 'no-referrer';
+        document.head.appendChild(fontAwesome);
+        console.log('字體圖標庫已加載');
+    }
+    
+    // 設置標記以避免重複加載
+    window.richTextEditorLoaded = true;
+}
+
+// 初始化富文本編輯器
+function initRichTextEditor() {
+    loadRichTextEditorScript();
+    
+    const editor = document.getElementById('record-description');
+    const toolbar = document.querySelector('.rich-text-toolbar');
+    const hiddenInput = document.getElementById('record-description-html');
+    
+    if (!editor || !toolbar || !hiddenInput) {
+        console.warn('找不到富文本編輯器元素，初始化失敗');
+        return;
+    }
+    
+    console.log('初始化富文本編輯器...');
+    
+    // 設置編輯器初始內容
+    editor.innerHTML = '';
+    hiddenInput.value = '';
+    
+    // 監聽編輯器內容變化，更新隱藏的input
+    editor.addEventListener('input', function() {
+        hiddenInput.value = editor.innerHTML;
+        console.log('編輯器內容已更新');
+    });
+    
+    // 處理粘貼純文本（避免粘貼時帶入不需要的格式）
+    editor.addEventListener('paste', function(e) {
+        e.preventDefault();
+        
+        // 獲取純文本
+        let text = '';
+        if (e.clipboardData || e.originalEvent.clipboardData) {
+            text = (e.originalEvent || e).clipboardData.getData('text/plain');
+        } else if (window.clipboardData) {
+            text = window.clipboardData.getData('Text');
+        }
+        
+        // 插入純文本
+        if (document.queryCommandSupported('insertText')) {
+            document.execCommand('insertText', false, text);
+        } else {
+            // 後備方案：插入HTML
+            document.execCommand('insertHTML', false, text.replace(/\n/g, '<br>'));
+        }
+    });
+    
+    // 為工具欄按鈕添加事件
+    toolbar.querySelectorAll('button.toolbar-item').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const command = this.dataset.command;
+            
+            // 切換按鈕的激活狀態 (適用於開關式功能)
+            if (['bold', 'italic', 'underline'].includes(command)) {
+                this.classList.toggle('active');
+            }
+            
+            if (command === 'foreColor') {
+                const colorPicker = toolbar.querySelector('.color-picker');
+                document.execCommand(command, false, colorPicker.value);
+            } else if (this.dataset.value) {
+                document.execCommand(command, false, this.dataset.value);
+            } else {
+                document.execCommand(command, false, null);
+            }
+            
+            editor.focus();
+        });
+    });
+    
+    // 字體下拉選單
+    toolbar.querySelector('.font-family').addEventListener('change', function() {
+        document.execCommand('fontName', false, this.value);
+        editor.focus();
+    });
+    
+    // 字體大小下拉選單
+    toolbar.querySelector('.font-size').addEventListener('change', function() {
+        document.execCommand('fontSize', false, this.value);
+        editor.focus();
+    });
+    
+    // 顏色選擇器
+    const colorPicker = toolbar.querySelector('.color-picker');
+    colorPicker.addEventListener('input', function() {
+        const colorButton = toolbar.querySelector('[data-command="foreColor"]');
+        colorButton.dataset.value = this.value;
+        document.execCommand('foreColor', false, this.value);
+        editor.focus();
+    });
+    
+    // 點擊顏色按鈕時打開顏色選擇器
+    toolbar.querySelector('[data-command="foreColor"]').addEventListener('click', function() {
+        colorPicker.click();
+    });
+    
+    // 添加鍵盤快捷鍵支持
+    editor.addEventListener('keydown', function(e) {
+        if (e.ctrlKey) {
+            // Ctrl+B: 粗體
+            if (e.key === 'b') {
+                e.preventDefault();
+                document.execCommand('bold', false, null);
+                toolbar.querySelector('[data-command="bold"]').classList.toggle('active');
+            }
+            // Ctrl+I: 斜體
+            else if (e.key === 'i') {
+                e.preventDefault();
+                document.execCommand('italic', false, null);
+                toolbar.querySelector('[data-command="italic"]').classList.toggle('active');
+            }
+            // Ctrl+U: 底線
+            else if (e.key === 'u') {
+                e.preventDefault();
+                document.execCommand('underline', false, null);
+                toolbar.querySelector('[data-command="underline"]').classList.toggle('active');
+            }
+        }
+    });
+    
+    console.log('富文本編輯器初始化完成');
+}
