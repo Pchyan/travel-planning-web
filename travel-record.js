@@ -241,14 +241,17 @@ const TravelRecord = (function() {
             </div>
             <div id="records-list-container" class="tab-content active">
                 <div class="records-actions">
-                    <button id="export-records-btn" class="action-btn" title="將記錄匯出為檔案">
+                    <button id="export-records-btn" class="action-btn" title="將記錄匯出為JSON檔案">
                         <i class="fas fa-file-export"></i> 匯出JSON
                     </button>
                     <button id="export-records-word-btn" class="action-btn" title="將記錄匯出為Word檔案">
                         <i class="fas fa-file-word"></i> 匯出Word
                     </button>
-                    <button id="import-records-btn" class="action-btn" title="從檔案匯入記錄">
-                        <i class="fas fa-file-import"></i> 匯入記錄
+                    <button id="export-records-html-btn" class="action-btn" title="將記錄匯出為HTML檔案">
+                        <i class="fas fa-file-code"></i> 匯出HTML
+                    </button>
+                    <button id="import-records-btn" class="action-btn" title="從JSON檔案匯入記錄">
+                        <i class="fas fa-file-import"></i> 匯入JSON記錄
                     </button>
                 </div>
                 <div id="records-list" class="records-list">
@@ -332,6 +335,9 @@ const TravelRecord = (function() {
         
         // 添加匯出Word記錄按鈕事件
         document.getElementById('export-records-word-btn').addEventListener('click', exportRecordsToWord);
+        
+        // 添加匯出HTML記錄按鈕事件
+        document.getElementById('export-records-html-btn').addEventListener('click', exportRecordsToHTML);
         
         // 添加匯入記錄按鈕事件
         document.getElementById('import-records-btn').addEventListener('click', importRecords);
@@ -1565,6 +1571,20 @@ const TravelRecord = (function() {
     // 備用方案：匯出為HTML檔案
     function exportAsHTML(selectedIndices) {
         try {
+            // 顯示載入中提示
+            const loadingMessage = document.createElement('div');
+            loadingMessage.style.position = 'fixed';
+            loadingMessage.style.top = '50%';
+            loadingMessage.style.left = '50%';
+            loadingMessage.style.transform = 'translate(-50%, -50%)';
+            loadingMessage.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            loadingMessage.style.color = 'white';
+            loadingMessage.style.padding = '20px';
+            loadingMessage.style.borderRadius = '5px';
+            loadingMessage.style.zIndex = '9999';
+            loadingMessage.innerHTML = '正在生成HTML檔案，請稍候...';
+            document.body.appendChild(loadingMessage);
+            
             // 篩選選中的記錄
             const selectedRecords = selectedIndices.map(index => records[index]);
             
@@ -1591,11 +1611,132 @@ const TravelRecord = (function() {
             document.body.removeChild(downloadLink);
             URL.revokeObjectURL(downloadLink.href);
             
-            alert('旅行記錄已成功匯出為HTML檔案。\n注意：此為備用格式，您可以用瀏覽器開啟此檔案查看，或複製內容到Word中。');
+            // 移除載入中提示
+            document.body.removeChild(loadingMessage);
+            
+            alert('旅行記錄已成功匯出為HTML檔案！\n您可以使用瀏覽器開啟此檔案查看，或複製內容到Word中。');
         } catch (error) {
             console.error('匯出HTML檔案時出錯:', error);
             alert('匯出HTML檔案時發生錯誤: ' + (error.message || '未知錯誤'));
         }
+    }
+    
+    // 添加直接匯出HTML的功能
+    function exportRecordsToHTML() {
+        if (records.length === 0) {
+            alert('沒有可匯出的旅行記錄');
+            return;
+        }
+        
+        // 創建選擇對話框，讓用戶選擇要匯出的記錄
+        const existingDialog = document.getElementById('export-selection-dialog');
+        if (existingDialog) {
+            existingDialog.remove();
+        }
+        
+        // 創建對話框
+        const dialog = document.createElement('div');
+        dialog.id = 'export-selection-dialog';
+        dialog.className = 'record-panel';
+        dialog.style.zIndex = '1200';
+        
+        // 生成記錄選擇列表的HTML
+        let recordsOptionsHtml = '';
+        records.forEach((record, index) => {
+            // 獲取第一張照片或使用默認圖標
+            const hasPhotos = record.photos && record.photos.length > 0;
+            const photoHtml = hasPhotos ? 
+                `<img src="${record.photos[0]}" alt="${record.title}" class="selection-thumbnail">` : 
+                `<div class="no-photo-small"><i class="fas fa-image"></i></div>`;
+            
+            recordsOptionsHtml += `
+                <div class="selection-item">
+                    <label class="selection-label">
+                        <input type="checkbox" class="record-selection" value="${index}" checked>
+                        <div class="selection-preview">
+                            ${photoHtml}
+                            <div class="selection-info">
+                                <div class="selection-title">${record.title || '未命名記錄'}</div>
+                                <div class="selection-date">${formatDate(record.date)}</div>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            `;
+        });
+        
+        // 設置對話框內容
+        dialog.innerHTML = `
+            <div class="record-panel-header">
+                <h2>選擇要匯出的記錄</h2>
+                <button id="close-export-dialog" class="close-btn">&times;</button>
+            </div>
+            <div class="export-dialog-content">
+                <p class="dialog-instruction">請選擇您想要匯出到HTML檔案的旅行記錄：</p>
+                
+                <div class="selection-actions">
+                    <button id="select-all-records" class="secondary-btn">全選</button>
+                    <button id="deselect-all-records" class="secondary-btn">取消全選</button>
+                </div>
+                
+                <div class="records-selection-list">
+                    ${recordsOptionsHtml}
+                </div>
+                
+                <div class="dialog-footer">
+                    <button id="export-selected-html" class="primary-btn">匯出選定記錄</button>
+                    <button id="cancel-export-dialog" class="secondary-btn">取消</button>
+                </div>
+            </div>
+        `;
+        
+        // 添加到頁面
+        document.body.appendChild(dialog);
+        
+        // 添加事件監聽器
+        document.getElementById('close-export-dialog').addEventListener('click', () => {
+            dialog.remove();
+        });
+        
+        document.getElementById('cancel-export-dialog').addEventListener('click', () => {
+            dialog.remove();
+        });
+        
+        document.getElementById('select-all-records').addEventListener('click', () => {
+            const checkboxes = dialog.querySelectorAll('.record-selection');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+            });
+        });
+        
+        document.getElementById('deselect-all-records').addEventListener('click', () => {
+            const checkboxes = dialog.querySelectorAll('.record-selection');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        });
+        
+        document.getElementById('export-selected-html').addEventListener('click', () => {
+            // 獲取選中的記錄索引
+            const selectedIndices = [];
+            const checkboxes = dialog.querySelectorAll('.record-selection');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selectedIndices.push(parseInt(checkbox.value));
+                }
+            });
+            
+            if (selectedIndices.length === 0) {
+                alert('請至少選擇一條記錄');
+                return;
+            }
+            
+            // 關閉對話框
+            dialog.remove();
+            
+            // 直接匯出HTML
+            exportAsHTML(selectedIndices);
+        });
     }
     
     // 公共API
