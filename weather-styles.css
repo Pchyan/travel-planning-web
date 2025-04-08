@@ -1,0 +1,240 @@
+/* 天氣資訊樣式 */
+.weather-info {
+    margin: 10px 0;
+    padding: 10px;
+    background-color: rgba(74, 137, 220, 0.1);
+    border-radius: 8px;
+    border-left: 4px solid #4a89dc;
+}
+
+.weather-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.weather-icon {
+    width: 50px;
+    height: 50px;
+    margin-right: 10px;
+}
+
+.weather-summary {
+    flex: 1;
+}
+
+.weather-summary h4 {
+    margin: 0 0 5px 0;
+    color: #4a89dc;
+}
+
+.weather-summary p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.weather-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.weather-detail {
+    display: flex;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.7);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.weather-detail i {
+    margin-right: 5px;
+    color: #4a89dc;
+}
+
+.weather-suggestions {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #ccc;
+}
+
+.weather-suggestions h4 {
+    margin: 0 0 5px 0;
+    color: #4a89dc;
+    font-size: 14px;
+}
+
+.weather-suggestions ul {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 13px;
+}
+
+.weather-suggestions li {
+    margin-bottom: 3px;
+}
+
+.weather-error {
+    color: #e74c3c;
+    font-style: italic;
+    font-size: 13px;
+}
+
+.weather-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+.weather-loading i {
+    margin-right: 8px;
+    animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 天氣設置對話框 */
+.weather-settings-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    width: 90%;
+    max-width: 500px;
+}
+
+.weather-settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.weather-settings-header h3 {
+    margin: 0;
+    color: #4a89dc;
+}
+
+.weather-settings-header button {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #7f8c8d;
+}
+
+.weather-settings-content {
+    margin-bottom: 20px;
+}
+
+.weather-settings-content p {
+    margin-bottom: 15px;
+    color: #555;
+}
+
+.weather-settings-form {
+    margin-bottom: 20px;
+}
+
+.weather-settings-form label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.weather-settings-form input {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.weather-settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.weather-settings-actions button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.weather-settings-actions button.primary {
+    background-color: #4a89dc;
+    color: white;
+}
+
+.weather-settings-actions button.secondary {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+/* 天氣設置按鈕 */
+.weather-settings-btn {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-left: 10px;
+}
+
+.weather-settings-btn:hover {
+    background-color: #3a70c0;
+}
+
+/* 天氣資訊切換按鈕 */
+.weather-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.weather-toggle h4 {
+    margin: 0;
+    color: #4a89dc;
+}
+
+.weather-toggle button {
+    background: none;
+    border: none;
+    color: #7f8c8d;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.weather-toggle button:hover {
+    color: #4a89dc;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .weather-details {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .weather-detail {
+        width: 100%;
+    }
+}

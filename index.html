@@ -8,12 +8,15 @@
     <title>旅行規劃助手</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <!-- Font Awesome圖標庫 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <!-- 針對行動裝置的圖示 -->
     <link rel="apple-touch-icon" sizes="180x180" href="https://cdn-icons-png.flaticon.com/512/2161/2161423.png">
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/512/2161/2161423.png">
     <!-- 添加旅行記錄模組樣式 -->
     <link rel="stylesheet" href="travel-record.css" />
+    <!-- 添加天氣服務模組樣式 -->
+    <link rel="stylesheet" href="weather-styles.css" />
     <style>
         /* 添加 .hidden 類 */
         .hidden {
@@ -27,7 +30,7 @@
             <h1>旅行規劃助手</h1>
             <!-- 移除頂部所有按鈕 -->
         </header>
-        
+
         <main>
             <section class="input-section">
                 <h2>行程規劃</h2>
@@ -36,7 +39,7 @@
                     <input type="text" id="starting-point" placeholder="請輸入您的出發地點">
                     <button id="set-starting-point"><i class="fas fa-map-marker-alt"></i> 設定</button>
                 </div>
-                
+
                 <div class="departure-time">
                     <label for="departure-date">出發日期：</label>
                     <input type="date" id="departure-date">
@@ -44,14 +47,14 @@
                     <input type="time" id="departure-time" value="09:00">
                     <button id="set-departure-time"><i class="far fa-clock"></i> 設定</button>
                 </div>
-                
+
                 <div class="daily-hours">
                     <label for="max-daily-hours">每日行程時間：</label>
                     <input type="number" id="max-daily-hours" min="1" max="24" step="0.5" value="8">
                     <span>小時</span>
                     <button id="set-daily-hours"><i class="fas fa-check"></i> 設定</button>
                 </div>
-                
+
                 <div class="save-load-buttons">
                     <button id="new-itinerary"><i class="fas fa-file"></i> 規劃新行程</button>
                     <button id="undo-button" title="復原上一步操作" disabled><i class="fas fa-undo"></i> 復原</button>
@@ -65,14 +68,14 @@
                     <!-- 在修復數據按鈕旁添加旅行記錄按鈕 -->
                     <button id="open-travel-record" title="查看和管理您的旅行記錄"><i class="fas fa-book"></i> 旅行記錄</button>
                 </div>
-                
+
                 <div class="add-destination">
                     <label for="new-destination">新增景點：</label>
                     <input type="text" id="new-destination" placeholder="請輸入景點名稱">
                     <button id="add-destination"><i class="fas fa-plus"></i> 新增</button>
                     <button id="set-coordinates-mode"><i class="fas fa-map-pin"></i> 使用經緯度</button>
                 </div>
-                
+
                 <div id="coordinates-input-container" style="display: none;" class="coordinates-input">
                     <div class="coordinates-help">
                         <p>如何從Google地圖獲取經緯度：</p>
@@ -99,27 +102,27 @@
                     <button id="manage-coordinates"><i class="fas fa-list"></i> 管理已儲存位置</button>
                 </div>
             </section>
-            
+
             <section class="itinerary-section">
                 <h2>行程安排</h2>
-                
+
                 <div class="view-mode-toggle">
                     <label>顯示模式：</label>
                     <button id="page-mode-btn" class="view-mode-button"><i class="fas fa-book-open"></i> 翻頁模式</button>
                     <button id="list-mode-btn" class="view-mode-button active"><i class="fas fa-list"></i> 一頁式</button>
                 </div>
-                
+
                 <div class="itinerary-summary">
                     <div class="summary-title">行程概覽</div>
                     <div class="summary-days" id="summary-days-container">
                         <!-- 這裡將由 JavaScript 動態填充日期選項 -->
                     </div>
                 </div>
-                
+
                 <div id="itinerary-container">
                     <!-- 這裡將由 JavaScript 動態填充行程內容 -->
                 </div>
-                
+
                 <div class="pager-controls">
                     <button id="prev-page-btn" class="page-nav-button"><i class="fas fa-chevron-left"></i> 上一天</button>
                     <div class="page-indicator">
@@ -132,21 +135,23 @@
                     <button id="next-page-btn" class="page-nav-button">下一天 <i class="fas fa-chevron-right"></i></button>
                 </div>
             </section>
-            
+
             <section class="map-section">
                 <h2>地圖預覽</h2>
                 <div id="map"></div>
             </section>
         </main>
-        
+
         <footer>
             <p>旅遊規劃助手 &copy; <span id="current-year">2023</span></p>
             <p class="footer-note">使用 Font Awesome 圖示與 Leaflet 地圖技術</p>
         </footer>
     </div>
-    
+
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="transportationSystems.js"></script>
+    <!-- 添加天氣服務模組腳本 -->
+    <script src="weather-service.js"></script>
     <script src="app.js"></script>
     <!-- 添加旅行記錄模組腳本 -->
     <script src="travel-record.js"></script>
