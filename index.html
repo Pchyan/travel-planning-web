@@ -21,6 +21,15 @@
     <link rel="stylesheet" href="ar-navigation.css" />
     <!-- 添加智慧行程建議模組樣式 -->
     <link rel="stylesheet" href="smart-recommendation.css" />
+    <!-- 添加預算追蹤模組樣式 -->
+    <link rel="stylesheet" href="budget-tracker.css" />
+
+    <!-- A-Frame VR/AR 框架 -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+
+    <!-- AR.js 框架 -->
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@master/aframe/build/aframe-ar.js"></script>
+
     <style>
         /* 添加 .hidden 類 */
         .hidden {
@@ -89,6 +98,8 @@
                     <button id="repair-data" title="修復或重置損壞的數據"><i class="fas fa-tools"></i> 修復數據</button>
                     <!-- 在修復數據按鈕旁添加旅行記錄按鈕 -->
                     <button id="open-travel-record" title="查看和管理您的旅行記錄"><i class="fas fa-book"></i> 旅行記錄</button>
+                    <!-- 添加預算追蹤按鈕 -->
+                    <button id="open-budget-tracker" title="設定和追蹤您的旅行預算"><i class="fas fa-money-bill-wave"></i> 預算追蹤</button>
                 </div>
 
                 <div class="add-destination">
@@ -349,14 +360,221 @@
         </div>
     </div>
 
+    <!-- 預算追蹤對話框 -->
+    <div id="budget-tracker-dialog" class="budget-tracker-dialog">
+        <div class="budget-tracker-panel">
+            <div class="budget-tracker-header">
+                <h2>旅行預算追蹤</h2>
+                <button id="close-budget-tracker" class="budget-tracker-close">&times;</button>
+            </div>
+            <div class="budget-tracker-tabs">
+                <button id="budget-overview-tab" class="budget-tracker-tab active">預算概覽</button>
+                <button id="add-expense-tab" class="budget-tracker-tab">記錄支出</button>
+                <button id="expenses-list-tab" class="budget-tracker-tab">支出列表</button>
+                <button id="budget-analysis-tab" class="budget-tracker-tab">預算分析</button>
+                <button id="budget-settings-tab" class="budget-tracker-tab">預算設定</button>
+            </div>
+            <div class="budget-tracker-content">
+                <!-- 預算概覽頁面 -->
+                <div id="budget-overview-content" class="budget-tracker-section active">
+                    <div class="budget-summary">
+                        <div class="budget-summary-row">
+                            <span class="budget-summary-label">總預算：</span>
+                            <span class="budget-summary-value" id="total-budget">NT$0</span>
+                        </div>
+                        <div class="budget-summary-row">
+                            <span class="budget-summary-label">已支出：</span>
+                            <span class="budget-summary-value" id="total-expenses">NT$0</span>
+                        </div>
+                        <div class="budget-summary-row">
+                            <span class="budget-summary-label">剩餘預算：</span>
+                            <span class="budget-summary-value under-budget" id="remaining-budget">NT$0</span>
+                        </div>
+                        <div class="budget-progress">
+                            <div class="budget-progress-bar" id="budget-progress-bar" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div id="budget-alerts-container">
+                        <!-- 預算警告將在這裡動態生成 -->
+                    </div>
+
+                    <div class="budget-categories-chart">
+                        <h3>支出分類</h3>
+                        <div id="categories-list">
+                            <!-- 分類支出將在這裡動態生成 -->
+                        </div>
+                    </div>
+
+                    <div class="recent-expenses">
+                        <h3>最近支出</h3>
+                        <div id="recent-expenses-list">
+                            <!-- 最近支出將在這裡動態生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 記錄支出頁面 -->
+                <div id="add-expense-content" class="budget-tracker-section">
+                    <h3>記錄新支出</h3>
+                    <div class="expense-form">
+                        <div class="expense-form-row">
+                            <label for="expense-name">支出名稱</label>
+                            <input type="text" id="expense-name" placeholder="支出名稱" required>
+
+                            <label for="expense-amount">金額</label>
+                            <input type="number" id="expense-amount" placeholder="金額" min="0" step="0.01" required>
+
+                            <label for="expense-category">分類</label>
+                            <select id="expense-category" required>
+                                <option value="住宿">住宿</option>
+                                <option value="交通">交通</option>
+                                <option value="餐飲">餐飲</option>
+                                <option value="景點門票">景點門票</option>
+                                <option value="購物">購物</option>
+                                <option value="娛樂">娛樂</option>
+                                <option value="其他">其他</option>
+                            </select>
+
+                            <label for="expense-date">日期</label>
+                            <input type="date" id="expense-date" required>
+
+                            <button id="add-expense-btn"><i class="fas fa-plus"></i></button>
+                        </div>
+                        <div class="expense-form-row">
+                            <label for="expense-notes">備註</label>
+                            <input type="text" id="expense-notes" placeholder="備註（選填）" style="grid-column: span 4;">
+                        </div>
+                    </div>
+
+                    <div class="expenses-list">
+                        <h3>最近添加的支出</h3>
+                        <div id="recent-added-expenses">
+                            <!-- 最近添加的支出將在這裡動態生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 支出列表頁面 -->
+                <div id="expenses-list-content" class="budget-tracker-section">
+                    <h3>所有支出</h3>
+                    <div class="expenses-filter">
+                        <select id="filter-category">
+                            <option value="all">所有分類</option>
+                            <option value="住宿">住宿</option>
+                            <option value="交通">交通</option>
+                            <option value="餐飲">餐飲</option>
+                            <option value="景點門票">景點門票</option>
+                            <option value="購物">購物</option>
+                            <option value="娛樂">娛樂</option>
+                            <option value="其他">其他</option>
+                        </select>
+                        <input type="date" id="filter-start-date" placeholder="開始日期">
+                        <input type="date" id="filter-end-date" placeholder="結束日期">
+                        <button id="apply-filter"><i class="fas fa-filter"></i> 篩選</button>
+                        <button id="clear-filter"><i class="fas fa-times"></i> 清除篩選</button>
+                    </div>
+
+                    <div class="expenses-list" id="all-expenses-list">
+                        <!-- 所有支出將在這裡動態生成 -->
+                    </div>
+                </div>
+
+                <!-- 預算分析頁面 -->
+                <div id="budget-analysis-content" class="budget-tracker-section">
+                    <h3>預算分析</h3>
+                    <div class="budget-chart-container" id="budget-chart-container">
+                        <!-- 圖表將在這裡動態生成 -->
+                    </div>
+
+                    <div class="budget-analysis-details">
+                        <h3>支出詳情</h3>
+                        <div id="budget-analysis-details-content">
+                            <!-- 分析詳情將在這裡動態生成 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 預算設定頁面 -->
+                <div id="budget-settings-content" class="budget-tracker-section">
+                    <h3>設定旅行預算</h3>
+                    <div class="budget-form">
+                        <div class="budget-form-group">
+                            <label for="budget-total">總預算</label>
+                            <input type="number" id="budget-total" min="0" step="0.01" placeholder="輸入總預算金額" required>
+                        </div>
+
+                        <div class="budget-form-group">
+                            <label for="budget-currency">貨幣</label>
+                            <select id="budget-currency">
+                                <option value="TWD">NT$ - 新台幣</option>
+                                <option value="USD">$ - 美元</option>
+                                <option value="EUR">€ - 歐元</option>
+                                <option value="JPY">¥ - 日圓</option>
+                                <option value="CNY">¥ - 人民幣</option>
+                                <option value="KRW">₩ - 韓元</option>
+                                <option value="GBP">£ - 英鎊</option>
+                                <option value="AUD">A$ - 澳幣</option>
+                                <option value="CAD">C$ - 加幣</option>
+                                <option value="HKD">HK$ - 港幣</option>
+                                <option value="SGD">S$ - 新加坡幣</option>
+                            </select>
+                        </div>
+
+                        <div class="budget-form-group">
+                            <label>分類預算設定</label>
+                            <div class="category-budget-item">
+                                <label for="budget-accommodation">住宿</label>
+                                <input type="number" id="budget-accommodation" min="0" step="0.01" placeholder="住宿預算">
+                            </div>
+                            <div class="category-budget-item">
+                                <label for="budget-transportation">交通</label>
+                                <input type="number" id="budget-transportation" min="0" step="0.01" placeholder="交通預算">
+                            </div>
+                            <div class="category-budget-item">
+                                <label for="budget-food">餐飲</label>
+                                <input type="number" id="budget-food" min="0" step="0.01" placeholder="餐飲預算">
+                            </div>
+                            <div class="category-budget-item">
+                                <label for="budget-attractions">景點門票</label>
+                                <input type="number" id="budget-attractions" min="0" step="0.01" placeholder="景點門票預算">
+                            </div>
+                            <div class="category-budget-item">
+                                <label for="budget-shopping">購物</label>
+                                <input type="number" id="budget-shopping" min="0" step="0.01" placeholder="購物預算">
+                            </div>
+                            <div class="category-budget-item">
+                                <label for="budget-entertainment">娛樂</label>
+                                <input type="number" id="budget-entertainment" min="0" step="0.01" placeholder="娛樂預算">
+                            </div>
+                            <div class="category-budget-item">
+                                <label for="budget-others">其他</label>
+                                <input type="number" id="budget-others" min="0" step="0.01" placeholder="其他預算">
+                            </div>
+                        </div>
+
+                        <div class="budget-form-group">
+                            <label for="budget-warning-threshold">預算警告閾值</label>
+                            <select id="budget-warning-threshold">
+                                <option value="0.7">70% (預設)</option>
+                                <option value="0.5">50%</option>
+                                <option value="0.8">80%</option>
+                                <option value="0.9">90%</option>
+                            </select>
+                        </div>
+
+                        <div class="budget-form-buttons">
+                            <button id="reset-budget" class="modify-itinerary">重置預算</button>
+                            <button id="save-budget" class="apply-itinerary">儲存預算</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Leaflet 地圖庫 -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-
-    <!-- A-Frame VR/AR 框架 -->
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-
-    <!-- AR.js 框架 -->
-    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@master/aframe/build/aframe-ar.js"></script>
 
     <!-- 專案腳本 -->
     <script src="transportationSystems.js"></script>
@@ -381,9 +599,19 @@
     <script src="travel-record.js"></script>
     <!-- 添加智慧行程建議 UI 控制器 -->
     <script src="smart-recommendation-ui.js"></script>
+    <!-- 添加預算追蹤模組腳本 -->
+    <script src="budget-tracker.js"></script>
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        // 初始化預算追蹤模組
+        if (typeof BudgetTracker !== 'undefined') {
+            BudgetTracker.init();
+            console.log('預算追蹤模組已初始化');
+        } else {
+            console.error('預算追蹤模組未找到');
+        }
 
         // 測試 ARNavigation 對象是否正確加載
         console.log('ARNavigation 對象測試:', typeof ARNavigation);
@@ -473,6 +701,19 @@
             } else {
                 console.error('關閉測試按鈕元素不存在');
             }
+        }
+
+        // 測試預算追蹤按鈕
+        const testBudgetButton = document.getElementById('test-transportation-delay');
+        if (testBudgetButton) {
+            testBudgetButton.addEventListener('click', function() {
+                if (typeof BudgetTracker !== 'undefined') {
+                    BudgetTracker.openBudgetTracker();
+                    console.log('預算追蹤測試已啟動');
+                } else {
+                    console.error('預算追蹤模組未找到');
+                }
+            });
         }
     </script>
 </body>

@@ -1,0 +1,403 @@
+/* 預算追蹤模組樣式 */
+.budget-tracker-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s;
+}
+
+.budget-tracker-dialog.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.budget-tracker-panel {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.budget-tracker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: #4a89dc;
+    color: white;
+}
+
+.budget-tracker-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.budget-tracker-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.budget-tracker-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.budget-tracker-tabs {
+    display: flex;
+    background-color: #f5f7fa;
+    border-bottom: 1px solid #e1e5eb;
+}
+
+.budget-tracker-tab {
+    padding: 12px 20px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #666;
+    position: relative;
+    transition: color 0.2s;
+}
+
+.budget-tracker-tab:hover {
+    color: #4a89dc;
+}
+
+.budget-tracker-tab.active {
+    color: #4a89dc;
+    font-weight: bold;
+}
+
+.budget-tracker-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: #4a89dc;
+}
+
+.budget-tracker-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.budget-tracker-section {
+    display: none;
+}
+
+.budget-tracker-section.active {
+    display: block;
+}
+
+/* 預算設定表單 */
+.budget-form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.budget-form-group {
+    margin-bottom: 15px;
+}
+
+.budget-form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+
+.budget-form-group input,
+.budget-form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.budget-form-group select {
+    height: 40px;
+}
+
+.budget-form-buttons {
+    grid-column: span 2;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.budget-form-buttons button {
+    padding: 10px 20px;
+}
+
+/* 支出記錄表單 */
+.expense-form {
+    background-color: #f9f9f9;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.expense-form-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.expense-form-row label {
+    display: none;
+}
+
+.expense-form-row input,
+.expense-form-row select {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.expense-form-row button {
+    padding: 8px;
+    min-width: unset;
+    height: 36px;
+}
+
+/* 支出列表 */
+.expenses-list {
+    margin-top: 20px;
+}
+
+.expense-item {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    gap: 10px;
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+    align-items: center;
+}
+
+.expense-item:hover {
+    background-color: #f5f7fa;
+}
+
+.expense-name {
+    font-weight: bold;
+}
+
+.expense-amount {
+    font-weight: bold;
+    color: #e74c3c;
+}
+
+.expense-category {
+    color: #666;
+}
+
+.expense-date {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.expense-actions button {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 5px;
+    transition: color 0.2s;
+}
+
+.expense-actions button:hover {
+    color: #e74c3c;
+}
+
+/* 預算摘要 */
+.budget-summary {
+    background-color: #f5f7fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.budget-summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.budget-summary-label {
+    font-weight: bold;
+    color: #555;
+}
+
+.budget-summary-value {
+    font-weight: bold;
+}
+
+.budget-summary-value.under-budget {
+    color: #2ecc71;
+}
+
+.budget-summary-value.over-budget {
+    color: #e74c3c;
+}
+
+.budget-progress {
+    height: 10px;
+    background-color: #eee;
+    border-radius: 5px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.budget-progress-bar {
+    height: 100%;
+    background-color: #2ecc71;
+    border-radius: 5px;
+    transition: width 0.3s;
+}
+
+.budget-progress-bar.warning {
+    background-color: #f39c12;
+}
+
+.budget-progress-bar.danger {
+    background-color: #e74c3c;
+}
+
+/* 預算分析 */
+.budget-chart-container {
+    margin-top: 20px;
+    height: 300px;
+}
+
+.budget-categories-chart {
+    margin-top: 20px;
+}
+
+.category-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.category-name {
+    display: flex;
+    align-items: center;
+}
+
+.category-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.category-amount {
+    font-weight: bold;
+}
+
+.category-percentage {
+    color: #666;
+    margin-left: 10px;
+}
+
+/* 預算警告 */
+.budget-alert {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #ffc107;
+}
+
+.budget-alert.danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left-color: #dc3545;
+}
+
+.budget-alert-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+}
+
+.budget-alert-title i {
+    margin-right: 8px;
+}
+
+/* 行程卡片中的預算資訊 */
+.destination-budget {
+    margin-top: 5px;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.destination-budget i {
+    margin-right: 5px;
+    color: #4a89dc;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .budget-form {
+        grid-template-columns: 1fr;
+    }
+    
+    .budget-form-buttons {
+        grid-column: 1;
+    }
+    
+    .expense-form-row,
+    .expense-item {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .expense-form-row {
+        row-gap: 10px;
+    }
+    
+    .expense-form-row label {
+        display: block;
+    }
+    
+    .expense-category,
+    .expense-date {
+        grid-column: span 2;
+    }
+}
