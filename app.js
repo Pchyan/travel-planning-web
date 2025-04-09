@@ -1841,6 +1841,14 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('已讀取位置緩存:', Object.keys(locationCache).length, '個地點');
     }
 
+    // 初始化智慧行程建議 UI 控制器
+    if (typeof SmartRecommendationUI !== 'undefined') {
+        SmartRecommendationUI.init();
+        console.log('智慧行程建議功能已初始化');
+    } else {
+        console.error('智慧行程建議模組未載入');
+    }
+
     // 載入並顯示保存的行程數據（如果有）
     try {
         // 嘗試從本地儲存中讀取行程數據

@@ -1,0 +1,432 @@
+/* 智慧行程建議樣式 */
+.recommendation-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.recommendation-panel {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.recommendation-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #4a89dc;
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.recommendation-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.recommendation-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+}
+
+.recommendation-tabs {
+    display: flex;
+    border-bottom: 1px solid #eee;
+    background-color: #f8f9fa;
+}
+
+.recommendation-tab {
+    padding: 12px 20px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #666;
+    position: relative;
+}
+
+.recommendation-tab.active {
+    color: #4a89dc;
+    font-weight: 600;
+}
+
+.recommendation-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background-color: #4a89dc;
+}
+
+.recommendation-content {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.recommendation-section {
+    margin-bottom: 20px;
+}
+
+.recommendation-section h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 1.2rem;
+}
+
+/* 偏好設定表單 */
+.preferences-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.preference-group {
+    margin-bottom: 15px;
+}
+
+.preference-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #555;
+}
+
+.preference-group select,
+.preference-group input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    margin-right: 8px;
+    width: auto;
+}
+
+.checkbox-group label {
+    margin-bottom: 0;
+    font-weight: normal;
+}
+
+.preference-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* 推薦景點卡片 */
+.attractions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.attraction-card {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+    background-color: white;
+}
+
+.attraction-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+}
+
+.attraction-image {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+}
+
+.attraction-content {
+    padding: 15px;
+}
+
+.attraction-name {
+    margin: 0 0 5px 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.attraction-location {
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+}
+
+.attraction-description {
+    color: #555;
+    font-size: 0.9rem;
+    margin-bottom: 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.attraction-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: #777;
+}
+
+.attraction-rating {
+    display: flex;
+    align-items: center;
+}
+
+.attraction-rating i {
+    color: #ffc107;
+    margin-right: 3px;
+}
+
+.attraction-duration {
+    display: flex;
+    align-items: center;
+}
+
+.attraction-duration i {
+    margin-right: 3px;
+}
+
+.attraction-match {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.attraction-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.attraction-tag {
+    background-color: #f0f0f0;
+    color: #555;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+}
+
+.attraction-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+}
+
+.attraction-actions button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.add-to-itinerary {
+    background-color: #4a89dc;
+    color: white;
+}
+
+.add-to-itinerary:hover {
+    background-color: #3a70c0;
+}
+
+.view-details {
+    background-color: #f0f0f0;
+    color: #555;
+}
+
+.view-details:hover {
+    background-color: #e0e0e0;
+}
+
+/* 行程建議 */
+.itinerary-days {
+    margin-top: 20px;
+}
+
+.itinerary-day {
+    margin-bottom: 25px;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.itinerary-day-header {
+    background-color: #f8f9fa;
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.itinerary-day-title {
+    margin: 0;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.itinerary-day-date {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.itinerary-attractions {
+    padding: 15px;
+}
+
+.itinerary-attraction {
+    display: flex;
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.itinerary-attraction:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.itinerary-attraction-image {
+    width: 80px;
+    height: 80px;
+    border-radius: 4px;
+    object-fit: cover;
+    margin-right: 15px;
+}
+
+.itinerary-attraction-details {
+    flex: 1;
+}
+
+.itinerary-attraction-name {
+    margin: 0 0 5px 0;
+    font-size: 1rem;
+    color: #333;
+}
+
+.itinerary-attraction-location {
+    color: #666;
+    font-size: 0.85rem;
+    margin-bottom: 5px;
+}
+
+.itinerary-attraction-meta {
+    display: flex;
+    gap: 15px;
+    font-size: 0.85rem;
+    color: #777;
+}
+
+.itinerary-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.itinerary-actions button {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.apply-itinerary {
+    background-color: #4a89dc;
+    color: white;
+}
+
+.apply-itinerary:hover {
+    background-color: #3a70c0;
+}
+
+.modify-itinerary {
+    background-color: #f0f0f0;
+    color: #555;
+}
+
+.modify-itinerary:hover {
+    background-color: #e0e0e0;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .preferences-form {
+        grid-template-columns: 1fr;
+    }
+    
+    .attractions-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .itinerary-attraction {
+        flex-direction: column;
+    }
+    
+    .itinerary-attraction-image {
+        width: 100%;
+        height: 150px;
+        margin-right: 0;
+        margin-bottom: 10px;
+    }
+    
+    .recommendation-tab {
+        padding: 10px;
+        font-size: 0.9rem;
+    }
+}

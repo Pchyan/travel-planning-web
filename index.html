@@ -19,6 +19,8 @@
     <link rel="stylesheet" href="weather-styles.css" />
     <!-- 添加 AR 導航模組樣式 -->
     <link rel="stylesheet" href="ar-navigation.css" />
+    <!-- 添加智慧行程建議模組樣式 -->
+    <link rel="stylesheet" href="smart-recommendation.css" />
     <style>
         /* 添加 .hidden 類 */
         .hidden {
@@ -81,6 +83,7 @@
                     <button id="save-itinerary"><i class="fas fa-save"></i> 儲存行程</button>
                     <button id="load-itinerary"><i class="fas fa-folder-open"></i> 讀取行程</button>
                     <button id="manage-itinerary"><i class="fas fa-cog"></i> 管理行程</button>
+                    <button id="smart-recommendation" title="獲取智慧行程建議"><i class="fas fa-lightbulb"></i> 智慧建議</button>
                     <button id="export-data"><i class="fas fa-file-export"></i> 匯出資料</button>
                     <button id="import-data"><i class="fas fa-file-import"></i> 匯入資料</button>
                     <button id="repair-data" title="修復或重置損壞的數據"><i class="fas fa-tools"></i> 修復數據</button>
@@ -232,6 +235,120 @@
         </div>
     </div>
 
+    <!-- 智慧行程建議對話框 -->
+    <div id="recommendation-dialog" class="recommendation-dialog hidden">
+        <div class="recommendation-panel">
+            <div class="recommendation-header">
+                <h2>智慧行程建議</h2>
+                <button id="close-recommendation" class="recommendation-close">&times;</button>
+            </div>
+            <div class="recommendation-tabs">
+                <button id="preferences-tab" class="recommendation-tab active">偏好設定</button>
+                <button id="attractions-tab" class="recommendation-tab">推薦景點</button>
+                <button id="itinerary-tab" class="recommendation-tab">行程建議</button>
+            </div>
+            <div class="recommendation-content">
+                <!-- 偏好設定頁面 -->
+                <div id="preferences-content" class="recommendation-section">
+                    <h3>設定您的旅遊偏好</h3>
+                    <div class="preferences-form">
+                        <div class="preference-group">
+                            <label for="travel-style">旅遊風格</label>
+                            <select id="travel-style" multiple>
+                                <!-- 將由 JavaScript 動態填充 -->
+                            </select>
+                        </div>
+                        <div class="preference-group">
+                            <label for="preferred-types">偏好景點類型</label>
+                            <select id="preferred-types" multiple>
+                                <!-- 將由 JavaScript 動態填充 -->
+                            </select>
+                        </div>
+                        <div class="preference-group">
+                            <label for="avoid-types">避免景點類型</label>
+                            <select id="avoid-types" multiple>
+                                <!-- 將由 JavaScript 動態填充 -->
+                            </select>
+                        </div>
+                        <div class="preference-group">
+                            <label for="travel-season">旅遊季節</label>
+                            <select id="travel-season">
+                                <option value="">當前季節</option>
+                                <!-- 將由 JavaScript 動態填充 -->
+                            </select>
+                        </div>
+                        <div class="preference-group">
+                            <label for="travel-duration">行程天數</label>
+                            <input type="number" id="travel-duration" min="1" max="14" value="3">
+                        </div>
+                        <div class="preference-group">
+                            <label for="travel-pace">行程節奏</label>
+                            <select id="travel-pace">
+                                <option value="relaxed">輕鬆悠閒</option>
+                                <option value="normal" selected>適中平衡</option>
+                                <option value="intensive">緊湊充實</option>
+                            </select>
+                        </div>
+                        <div class="preference-group">
+                            <label for="travel-budget">旅遊預算</label>
+                            <select id="travel-budget">
+                                <option value="low">經濟實惠</option>
+                                <option value="medium" selected>中等預算</option>
+                                <option value="high">豪華享受</option>
+                            </select>
+                        </div>
+                        <div class="preference-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="with-children">
+                                <label for="with-children">有兒童同行</label>
+                            </div>
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="with-elderly">
+                                <label for="with-elderly">有老人同行</label>
+                            </div>
+                        </div>
+                        <div class="preference-group">
+                            <label for="preferred-countries">偏好國家</label>
+                            <select id="preferred-countries" multiple>
+                                <!-- 將由 JavaScript 動態填充 -->
+                            </select>
+                        </div>
+                        <div class="preference-group">
+                            <label for="preferred-cities">偏好城市</label>
+                            <select id="preferred-cities" multiple>
+                                <!-- 將由 JavaScript 動態填充 -->
+                            </select>
+                        </div>
+                    </div>
+                    <div class="preference-buttons">
+                        <button id="reset-preferences" class="modify-itinerary">重置偏好</button>
+                        <button id="apply-preferences" class="apply-itinerary">套用偏好</button>
+                    </div>
+                </div>
+
+                <!-- 推薦景點頁面 -->
+                <div id="attractions-content" class="recommendation-section hidden">
+                    <h3>根據您的偏好推薦的景點</h3>
+                    <div class="attractions-grid">
+                        <!-- 將由 JavaScript 動態填充 -->
+                    </div>
+                </div>
+
+                <!-- 行程建議頁面 -->
+                <div id="itinerary-content" class="recommendation-section hidden">
+                    <h3>智慧行程建議</h3>
+                    <div class="itinerary-days">
+                        <!-- 將由 JavaScript 動態填充 -->
+                    </div>
+                    <div class="itinerary-actions">
+                        <button id="modify-itinerary" class="modify-itinerary">修改行程</button>
+                        <button id="apply-itinerary" class="apply-itinerary">套用行程</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Leaflet 地圖庫 -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 
@@ -253,9 +370,17 @@
     <script src="transportation-delay-handler.js"></script>
     <!-- 添加交通延誤初始化腳本 -->
     <script src="init-transportation-delay.js"></script>
+    <!-- 添加景點資料庫 -->
+    <script src="attraction-database.js"></script>
+    <!-- 添加本地景點圖片資料庫 -->
+    <script src="local-attraction-images.js"></script>
+    <!-- 添加智慧行程建議模組 -->
+    <script src="smart-itinerary-recommender.js"></script>
     <script src="app.js"></script>
     <!-- 添加旅行記錄模組腳本 -->
     <script src="travel-record.js"></script>
+    <!-- 添加智慧行程建議 UI 控制器 -->
+    <script src="smart-recommendation-ui.js"></script>
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
