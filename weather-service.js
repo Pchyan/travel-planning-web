@@ -1,20 +1,20 @@
 // 天氣服務模組 - 整合OpenWeatherMap API
 const WeatherService = (function() {
     // OpenWeatherMap API金鑰
-    const API_KEY = ''; // 請在此處填入您的API金鑰
-    
+    let API_KEY = ''; // 將從本地儲存中讀取
+
     // API基礎URL
     const BASE_URL = 'https://api.openweathermap.org/data/3.0';
-    
+
     // 天氣圖示URL
     const ICON_URL = 'https://openweathermap.org/img/wn/';
-    
+
     // 天氣資料緩存
     let weatherCache = {};
-    
+
     // 緩存過期時間（毫秒）- 3小時
     const CACHE_EXPIRY = 3 * 60 * 60 * 1000;
-    
+
     // 從本地儲存載入緩存
     function loadCacheFromStorage() {
         const cachedData = localStorage.getItem('weather_cache');
@@ -22,18 +22,18 @@ const WeatherService = (function() {
             try {
                 weatherCache = JSON.parse(cachedData);
                 console.log('已從本地儲存載入天氣緩存');
-                
+
                 // 清理過期的緩存項目
                 const now = Date.now();
                 let hasExpired = false;
-                
+
                 Object.keys(weatherCache).forEach(key => {
                     if (now - weatherCache[key].timestamp > CACHE_EXPIRY) {
                         delete weatherCache[key];
                         hasExpired = true;
                     }
                 });
-                
+
                 if (hasExpired) {
                     saveCacheToStorage();
                     console.log('已清理過期的天氣緩存項目');
@@ -44,7 +44,7 @@ const WeatherService = (function() {
             }
         }
     }
-    
+
     // 將緩存保存到本地儲存
     function saveCacheToStorage() {
         try {
@@ -58,17 +58,201 @@ const WeatherService = (function() {
             }
         }
     }
-    
+
     // 生成緩存鍵
     function generateCacheKey(lat, lon, date) {
         return `${lat},${lon},${date}`;
     }
-    
+
     // 檢查API金鑰是否已設置
     function isApiKeySet() {
+        // 從本地儲存中讀取API金鑰
+        API_KEY = localStorage.getItem('weather_api_key') || '';
         return API_KEY && API_KEY.length > 0;
     }
-    
+
+    // 獲取天氣預報資料（包含未來7天）
+    async function getWeatherForecast(lat, lon) {
+        if (!isApiKeySet()) {
+            console.error('尚未設置OpenWeatherMap API金鑰');
+            return {
+                error: true,
+                message: '尚未設置天氣API金鑰'
+            };
+        }
+
+        // 檢查參數
+        if (!lat || !lon) {
+            console.error('獲取天氣預報時缺少必要參數');
+            return {
+                error: true,
+                message: '缺少必要參數'
+            };
+        }
+
+        // 生成緩存鑰
+        const cacheKey = `forecast_${lat},${lon}`;
+
+        // 檢查緩存
+        if (weatherCache[cacheKey] &&
+            (Date.now() - weatherCache[cacheKey].timestamp < CACHE_EXPIRY)) {
+            console.log(`使用緩存的天氣預報資料: ${cacheKey}`);
+            return weatherCache[cacheKey].data;
+        }
+
+        try {
+            // 使用One Call API獲取未來7天的預報，包含警報
+            const response = await fetch(`${BASE_URL}/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly&units=metric&lang=zh_tw&appid=${API_KEY}`);
+
+            if (!response.ok) {
+                throw new Error(`API請求失敗: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // 添加額外資訊
+            const cityName = data.timezone.split('/').pop().replace(/_/g, ' ');
+
+            // 為每天添加日期資訊
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            data.daily.forEach((day, index) => {
+                const forecastDate = new Date(today);
+                forecastDate.setDate(today.getDate() + index);
+                day.date = forecastDate.toISOString().split('T')[0];
+                day.city = cityName;
+                day.forecast_type = 'daily';
+
+                // 添加天氣警報標記
+                day.hasWarning = checkWeatherWarning(day);
+            });
+
+            // 添加天氣警報摘要
+            data.warnings = [];
+
+            // 如果有警報數據，則處理警報
+            if (data.alerts && data.alerts.length > 0) {
+                data.hasAlerts = true;
+                data.alerts.forEach(alert => {
+                    data.warnings.push({
+                        event: alert.event,
+                        description: alert.description,
+                        start: new Date(alert.start * 1000),
+                        end: new Date(alert.end * 1000),
+                        sender: alert.sender_name
+                    });
+                });
+            } else {
+                data.hasAlerts = false;
+            }
+
+            // 添加天氣摘要
+            data.summary = generateWeatherSummary(data);
+
+            // 緩存結果
+            weatherCache[cacheKey] = {
+                timestamp: Date.now(),
+                data: data
+            };
+
+            // 保存緩存到本地儲存
+            saveCacheToStorage();
+
+            return data;
+        } catch (error) {
+            console.error('獲取天氣預報時發生錯誤:', error);
+            return {
+                error: true,
+                message: `獲取天氣預報失敗: ${error.message}`
+            };
+        }
+    }
+
+    // 檢查天氣警報
+    function checkWeatherWarning(weatherData) {
+        if (!weatherData) return false;
+
+        // 檢查天氣ID
+        const weatherId = weatherData.weather.id;
+        const pop = weatherData.pop || 0; // 降雨機率
+        const windSpeed = weatherData.wind_speed || 0; // 風速
+        const temp = weatherData.temp.day || 0; // 溫度
+
+        // 危險天氣條件
+        // 雷雨 (200-232)
+        if (weatherId >= 200 && weatherId <= 232) return true;
+
+        // 大雨/暴雨 (502-504, 522, 531)
+        if ((weatherId >= 502 && weatherId <= 504) || weatherId === 522 || weatherId === 531) return true;
+
+        // 大雪 (602, 622)
+        if (weatherId === 602 || weatherId === 622) return true;
+
+        // 龍捲風 (781)
+        if (weatherId === 781) return true;
+
+        // 高降雨機率 (>70%)
+        if (pop > 0.7) return true;
+
+        // 強風/大風 (>10.8 m/s)
+        if (windSpeed > 10.8) return true;
+
+        // 高溫 (>35°C)
+        if (temp > 35) return true;
+
+        // 低溫 (<0°C)
+        if (temp < 0) return true;
+
+        return false;
+    }
+
+    // 生成天氣摘要
+    function generateWeatherSummary(forecastData) {
+        if (!forecastData || !forecastData.daily || forecastData.daily.length === 0) {
+            return '無法生成天氣摘要';
+        }
+
+        // 獲取未來3天的天氣資料
+        const nextThreeDays = forecastData.daily.slice(0, 3);
+
+        // 檢查是否有警報
+        const hasWarnings = nextThreeDays.some(day => day.hasWarning);
+
+        // 計算降雨天數
+        const rainyDays = nextThreeDays.filter(day => {
+            const weatherId = day.weather.id;
+            return (weatherId >= 200 && weatherId < 700) || day.pop > 0.5;
+        }).length;
+
+        // 計算平均溫度
+        const avgTemp = nextThreeDays.reduce((sum, day) => sum + day.temp.day, 0) / nextThreeDays.length;
+
+        // 生成摘要
+        let summary = '';
+
+        if (hasWarnings) {
+            summary += '未來幾天有不良天氣警報，請留意天氣變化。';
+        } else if (rainyDays >= 2) {
+            summary += '未來幾天多雨，建議攜帶雨具或調整行程。';
+        } else if (rainyDays === 1) {
+            summary += '未來幾天有一天可能下雨，請做好準備。';
+        } else if (avgTemp > 30) {
+            summary += '未來幾天氣溫較高，建議做好防曬措施。';
+        } else if (avgTemp < 10) {
+            summary += '未來幾天氣溫較低，請稍備保暖衣物。';
+        } else {
+            summary += '未來幾天天氣良好，適合所有戶外活動。';
+        }
+
+        // 添加警報資訊
+        if (forecastData.hasAlerts && forecastData.warnings.length > 0) {
+            summary += ` 特別警報: ${forecastData.warnings[0].event}。`;
+        }
+
+        return summary;
+    }
+
     // 獲取特定日期的天氣預報
     async function getWeatherForDate(lat, lon, date) {
         if (!isApiKeySet()) {
@@ -78,7 +262,7 @@ const WeatherService = (function() {
                 message: '尚未設置天氣API金鑰'
             };
         }
-        
+
         // 檢查參數
         if (!lat || !lon || !date) {
             console.error('獲取天氣預報時缺少必要參數');
@@ -87,50 +271,43 @@ const WeatherService = (function() {
                 message: '缺少必要參數'
             };
         }
-        
+
         // 生成緩存鍵
         const cacheKey = generateCacheKey(lat, lon, date);
-        
+
         // 檢查緩存
-        if (weatherCache[cacheKey] && 
+        if (weatherCache[cacheKey] &&
             (Date.now() - weatherCache[cacheKey].timestamp < CACHE_EXPIRY)) {
             console.log(`使用緩存的天氣資料: ${cacheKey}`);
             return weatherCache[cacheKey].data;
         }
-        
+
         try {
+            // 先嘗試獲取完整的預報資料
+            const forecastData = await getWeatherForecast(lat, lon);
+
+            if (forecastData.error) {
+                return forecastData; // 返回錯誤
+            }
+
             // 計算日期差異（天數）
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const targetDate = new Date(date);
             targetDate.setHours(0, 0, 0, 0);
-            
+
             const daysDiff = Math.round((targetDate - today) / (1000 * 60 * 60 * 24));
-            
+
             let weatherData;
-            
-            // 根據日期差異選擇適當的API端點
+
+            // 根據日期差異選擇適當的資料
             if (daysDiff >= 0 && daysDiff <= 7) {
-                // 使用One Call API獲取未來7天的預報
-                const response = await fetch(`${BASE_URL}/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&lang=zh_tw&appid=${API_KEY}`);
-                
-                if (!response.ok) {
-                    throw new Error(`API請求失敗: ${response.status} ${response.statusText}`);
-                }
-                
-                const data = await response.json();
-                
-                // 提取指定日期的天氣資料
-                weatherData = data.daily[daysDiff];
-                
-                // 添加額外資訊
-                weatherData.city = data.timezone.split('/').pop().replace(/_/g, ' ');
-                weatherData.date = date;
-                weatherData.forecast_type = 'daily';
+                // 從預報資料中提取指定日期的天氣資料
+                weatherData = forecastData.daily[daysDiff];
             } else if (daysDiff > 7 && daysDiff <= 16) {
                 // 使用16天預報API（需要付費訂閱）
                 console.warn('請求的日期超出免費API的7天預報範圍，嘗試使用16天預報API');
-                
+
                 // 這裡可以實作付費API的調用，但目前我們返回一個錯誤
                 return {
                     error: true,
@@ -139,7 +316,7 @@ const WeatherService = (function() {
             } else if (daysDiff < 0) {
                 // 使用歷史天氣API（需要付費訂閱）
                 console.warn('請求的是過去日期的天氣資料，嘗試使用歷史天氣API');
-                
+
                 // 這裡可以實作歷史天氣API的調用，但目前我們返回一個錯誤
                 return {
                     error: true,
@@ -152,16 +329,16 @@ const WeatherService = (function() {
                     message: '請求的日期超出可預報範圍（最多7天）'
                 };
             }
-            
+
             // 緩存結果
             weatherCache[cacheKey] = {
                 timestamp: Date.now(),
                 data: weatherData
             };
-            
+
             // 保存緩存到本地儲存
             saveCacheToStorage();
-            
+
             return weatherData;
         } catch (error) {
             console.error('獲取天氣預報時發生錯誤:', error);
@@ -171,7 +348,7 @@ const WeatherService = (function() {
             };
         }
     }
-    
+
     // 獲取當前天氣
     async function getCurrentWeather(lat, lon) {
         if (!isApiKeySet()) {
@@ -181,7 +358,7 @@ const WeatherService = (function() {
                 message: '尚未設置天氣API金鑰'
             };
         }
-        
+
         // 檢查參數
         if (!lat || !lon) {
             console.error('獲取當前天氣時缺少必要參數');
@@ -190,28 +367,28 @@ const WeatherService = (function() {
                 message: '缺少必要參數'
             };
         }
-        
+
         // 生成緩存鍵
         const today = new Date().toISOString().split('T')[0];
         const cacheKey = generateCacheKey(lat, lon, 'current');
-        
+
         // 檢查緩存
-        if (weatherCache[cacheKey] && 
+        if (weatherCache[cacheKey] &&
             (Date.now() - weatherCache[cacheKey].timestamp < CACHE_EXPIRY)) {
             console.log(`使用緩存的當前天氣資料: ${cacheKey}`);
             return weatherCache[cacheKey].data;
         }
-        
+
         try {
             // 使用Current Weather API獲取當前天氣
             const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&lang=zh_tw&appid=${API_KEY}`);
-            
+
             if (!response.ok) {
                 throw new Error(`API請求失敗: ${response.status} ${response.statusText}`);
             }
-            
+
             const data = await response.json();
-            
+
             // 格式化天氣資料
             const weatherData = {
                 city: data.name,
@@ -230,16 +407,16 @@ const WeatherService = (function() {
                 clouds: data.clouds.all,
                 dt: data.dt
             };
-            
+
             // 緩存結果
             weatherCache[cacheKey] = {
                 timestamp: Date.now(),
                 data: weatherData
             };
-            
+
             // 保存緩存到本地儲存
             saveCacheToStorage();
-            
+
             return weatherData;
         } catch (error) {
             console.error('獲取當前天氣時發生錯誤:', error);
@@ -249,27 +426,27 @@ const WeatherService = (function() {
             };
         }
     }
-    
+
     // 獲取天氣圖示URL
     function getWeatherIconUrl(iconCode, size = '2x') {
         return `${ICON_URL}${iconCode}@${size}.png`;
     }
-    
+
     // 獲取風向文字描述
     function getWindDirection(degrees) {
         const directions = ['北', '東北', '東', '東南', '南', '西南', '西', '西北'];
         const index = Math.round(degrees / 45) % 8;
         return directions[index];
     }
-    
+
     // 格式化天氣描述
     function formatWeatherDescription(weatherData) {
         if (!weatherData || weatherData.error) {
             return '無法獲取天氣資訊';
         }
-        
+
         let description = '';
-        
+
         if (weatherData.forecast_type === 'current') {
             description = `${weatherData.city} 當前天氣: ${weatherData.weather.description}, 溫度 ${Math.round(weatherData.temp.day)}°C`;
             description += `\n濕度: ${weatherData.humidity}%, 風速: ${weatherData.wind_speed}m/s (${getWindDirection(weatherData.wind_deg)}風)`;
@@ -277,27 +454,27 @@ const WeatherService = (function() {
             description = `${weatherData.city} ${weatherData.date} 天氣預報: ${weatherData.weather.description}`;
             description += `\n溫度: ${Math.round(weatherData.temp.day)}°C (最低 ${Math.round(weatherData.temp.min)}°C / 最高 ${Math.round(weatherData.temp.max)}°C)`;
             description += `\n濕度: ${weatherData.humidity}%, 風速: ${weatherData.wind_speed}m/s (${getWindDirection(weatherData.wind_deg)}風)`;
-            
+
             if (weatherData.pop) {
                 description += `\n降雨機率: ${Math.round(weatherData.pop * 100)}%`;
             }
         }
-        
+
         return description;
     }
-    
+
     // 根據天氣狀況提供行程建議
     function getTravelSuggestions(weatherData) {
         if (!weatherData || weatherData.error) {
             return [];
         }
-        
+
         const suggestions = [];
         const weatherId = weatherData.weather.id;
         const temp = weatherData.temp.day;
         const windSpeed = weatherData.wind_speed;
         const pop = weatherData.pop || 0;
-        
+
         // 根據天氣ID分類提供建議
         // 雷雨 (2xx)
         if (weatherId >= 200 && weatherId < 300) {
@@ -358,7 +535,7 @@ const WeatherService = (function() {
                 suggestions.push(`有${Math.round(pop * 100)}%的降雨機率，建議攜帶雨具`);
             }
         }
-        
+
         // 根據溫度提供建議
         if (temp > 35) {
             suggestions.push('極高溫天氣，請避免長時間戶外活動');
@@ -372,7 +549,7 @@ const WeatherService = (function() {
         } else if (temp < 10) {
             suggestions.push('氣溫較低，請穿著保暖衣物');
         }
-        
+
         // 根據風速提供建議
         if (windSpeed > 10.8) { // 強風
             suggestions.push('風速較大，戶外活動時請注意安全');
@@ -381,34 +558,43 @@ const WeatherService = (function() {
             suggestions.push('大風天氣，建議取消戶外活動');
             suggestions.push('注意交通安全，留意掉落物');
         }
-        
+
         return suggestions;
     }
-    
+
     // 初始化模組
     function init() {
+        // 從本地儲存中讀取API金鑰
+        API_KEY = localStorage.getItem('weather_api_key') || '';
         loadCacheFromStorage();
         console.log('天氣服務模組已初始化');
+        if (API_KEY) {
+            console.log('已讀取天氣API金鑰');
+        } else {
+            console.log('尚未設置天氣API金鑰');
+        }
     }
-    
+
     // 設置API金鑰
     function setApiKey(key) {
         if (key && key.length > 0) {
             localStorage.setItem('weather_api_key', key);
+            API_KEY = key; // 同時更新內存中的API金鑰
             return true;
         }
         return false;
     }
-    
+
     // 獲取API金鑰
     function getApiKey() {
         return localStorage.getItem('weather_api_key') || '';
     }
-    
+
     // 公開API
     return {
         init: init,
         getWeatherForDate: getWeatherForDate,
+        getWeatherForecast: getWeatherForecast,
         getCurrentWeather: getCurrentWeather,
         getWeatherIconUrl: getWeatherIconUrl,
         formatWeatherDescription: formatWeatherDescription,

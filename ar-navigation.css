@@ -1,0 +1,451 @@
+/**
+ * AR 導航模組樣式
+ */
+
+/* AR 視圖容器 */
+.ar-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    display: none;
+    background-color: transparent;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.ar-container.active {
+    display: block;
+    opacity: 1;
+}
+
+/* AR 場景 */
+.ar-scene {
+    width: 100%;
+    height: 100%;
+}
+
+/* AR 控制面板 */
+.ar-controls {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+    z-index: 1001;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+.ar-container.active .ar-controls {
+    transform: translateY(0);
+    opacity: 1;
+    transition-delay: 0.3s;
+}
+
+.ar-button {
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    margin: 0 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.ar-button:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+    transform: scale(1.1);
+}
+
+.ar-button:active {
+    transform: scale(0.95);
+}
+
+.ar-close-button {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    cursor: pointer;
+    z-index: 1002;
+    transform: scale(0);
+    opacity: 0;
+    transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+.ar-container.active .ar-close-button {
+    transform: scale(1);
+    opacity: 1;
+    transition-delay: 0.4s;
+}
+
+/* AR 資訊面板 */
+.ar-info-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    border-radius: 10px;
+    padding: 15px;
+    max-width: 80%;
+    z-index: 1002;
+    transform: translateX(-100px);
+    opacity: 0;
+    transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+.ar-container.active .ar-info-panel {
+    transform: translateX(0);
+    opacity: 1;
+    transition-delay: 0.2s;
+}
+
+.ar-destination-info {
+    margin-bottom: 10px;
+}
+
+.ar-destination-name {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.ar-destination-distance {
+    font-size: 14px;
+}
+
+/* AR 指南針 */
+.ar-compass {
+    position: absolute;
+    top: 20px;
+    right: 80px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1002;
+    transform: scale(0) rotate(180deg);
+    opacity: 0;
+    transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+.ar-container.active .ar-compass {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+    transition-delay: 0.3s;
+}
+
+.ar-compass-arrow {
+    width: 40px;
+    height: 40px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: transform 0.3s ease;
+}
+
+/* AR 地標 */
+.ar-marker {
+    cursor: pointer;
+    opacity: 0.9;
+    transition: all 0.3s ease;
+}
+
+.ar-marker:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* AR 方向指示器 */
+.ar-direction-indicator {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>');
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: transform 0.3s ease;
+}
+
+/* 相機權限請求對話框 */
+.ar-permission-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background-color: white;
+    border-radius: 10px;
+    padding: 20px;
+    max-width: 80%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    z-index: 1100;
+    text-align: center;
+    opacity: 0;
+    animation: fadeInScale 0.3s forwards;
+}
+
+@keyframes fadeInScale {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+.ar-permission-dialog h3 {
+    margin-top: 0;
+    color: #333;
+    font-size: 18px;
+}
+
+.ar-permission-dialog p {
+    margin-bottom: 20px;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* 加載指示器 */
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 15px;
+}
+
+.spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(74, 137, 220, 0.3);
+    border-radius: 50%;
+    border-top-color: #4a89dc;
+    animation: spin 1s linear infinite;
+    margin-bottom: 10px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.ar-permission-dialog button {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    margin-top: 10px;
+}
+
+.ar-permission-dialog button:hover {
+    background-color: #3a70c0;
+    transform: translateY(-2px);
+}
+
+.ar-permission-dialog button:active {
+    transform: translateY(0);
+}
+
+/* 不支援 AR 的提示和錯誤訊息 */
+.ar-not-supported, #ar-error-message {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background-color: white;
+    border-radius: 10px;
+    padding: 20px;
+    max-width: 80%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    z-index: 1100;
+    text-align: center;
+    opacity: 0;
+    animation: fadeInScale 0.3s forwards;
+}
+
+.ar-not-supported h3, #ar-error-message h3 {
+    margin-top: 0;
+    color: #e74c3c;
+    font-size: 18px;
+}
+
+.ar-not-supported p, #ar-error-message p {
+    margin-bottom: 20px;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.ar-not-supported button, #ar-error-message button {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    margin-top: 10px;
+}
+
+.ar-not-supported button:hover, #ar-error-message button:hover {
+    background-color: #3a70c0;
+    transform: translateY(-2px);
+}
+
+.ar-not-supported button:active, #ar-error-message button:active {
+    transform: translateY(0);
+}
+
+/* 目的地詳細資訊對話框 */
+.ar-details-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background-color: white;
+    border-radius: 10px;
+    width: 80%;
+    max-width: 400px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 1200;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.ar-details-dialog.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.ar-details-header {
+    background-color: #4a89dc;
+    color: white;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ar-details-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.ar-details-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.ar-details-content {
+    padding: 15px;
+}
+
+.ar-details-content p {
+    margin: 10px 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.ar-details-actions {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.ar-details-button {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.ar-details-button:hover {
+    background-color: #3a70c0;
+    transform: translateY(-2px);
+}
+
+.ar-details-button:active {
+    transform: translateY(0);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .ar-controls {
+        bottom: 10px;
+    }
+
+    .ar-button {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+
+    .ar-close-button {
+        top: 10px;
+        right: 10px;
+        width: 36px;
+        height: 36px;
+    }
+
+    .ar-info-panel {
+        top: 10px;
+        left: 10px;
+        padding: 10px;
+    }
+
+    .ar-compass {
+        top: 10px;
+        right: 60px;
+        width: 50px;
+        height: 50px;
+    }
+
+    .ar-details-dialog {
+        width: 90%;
+        max-width: none;
+    }
+}

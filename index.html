@@ -17,6 +17,8 @@
     <link rel="stylesheet" href="travel-record.css" />
     <!-- 添加天氣服務模組樣式 -->
     <link rel="stylesheet" href="weather-styles.css" />
+    <!-- 添加 AR 導航模組樣式 -->
+    <link rel="stylesheet" href="ar-navigation.css" />
     <style>
         /* 添加 .hidden 類 */
         .hidden {
@@ -138,6 +140,11 @@
 
             <section class="map-section">
                 <h2>地圖預覽</h2>
+                <div class="map-controls">
+                    <button id="start-ar-navigation" class="ar-nav-button" title="啟動 AR 導航">
+                        <i class="fas fa-vr-cardboard"></i> AR 導航
+                    </button>
+                </div>
                 <div id="map"></div>
             </section>
         </main>
@@ -148,13 +155,72 @@
         </footer>
     </div>
 
+    <!-- AR 導航容器 -->
+    <div id="ar-container" class="ar-container">
+        <!-- A-Frame AR 場景 -->
+        <a-scene id="ar-scene" class="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;">
+            <!-- 目的地標記將在運行時動態添加 -->
+
+            <!-- 方向指示器 -->
+            <a-entity id="ar-direction-indicator" position="0 0 -5">
+                <a-triangle color="#FF5722" rotation="0 0 0" scale="0.5 0.5 0.5"></a-triangle>
+            </a-entity>
+
+            <!-- 目的地標記模板 -->
+            <a-entity id="destination-template" visible="false">
+                <a-sphere radius="0.5" color="#4a89dc"></a-sphere>
+                <a-text id="destination-text" value="目的地" position="0 1 0" align="center" color="white" scale="2 2 2"></a-text>
+            </a-entity>
+
+            <!-- 相機實體 -->
+            <a-entity camera></a-entity>
+        </a-scene>
+
+        <!-- AR UI 元素 -->
+        <button id="close-ar-navigation" class="ar-close-button">
+            <i class="fas fa-times"></i>
+        </button>
+
+        <div class="ar-info-panel">
+            <div class="ar-destination-info">
+                <div class="ar-destination-name">目的地名稱</div>
+                <div class="ar-destination-distance">距離: <span id="ar-distance">0</span> 公尺</div>
+                <div class="ar-destination-time">預計時間: <span id="ar-time">0 分</span></div>
+            </div>
+        </div>
+
+        <div class="ar-compass">
+            <div class="ar-compass-arrow" id="ar-compass-arrow"></div>
+        </div>
+
+        <div class="ar-controls">
+            <button class="ar-button" id="ar-center-view" title="將視圖對準目的地">
+                <i class="fas fa-crosshairs"></i>
+            </button>
+            <button class="ar-button" id="ar-next-destination" title="下一個目的地">
+                <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Leaflet 地圖庫 -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+    <!-- A-Frame VR/AR 框架 -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+
+    <!-- AR.js 框架 -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+    <!-- 專案腳本 -->
     <script src="transportationSystems.js"></script>
     <!-- 添加天氣服務模組腳本 -->
     <script src="weather-service.js"></script>
     <script src="app.js"></script>
     <!-- 添加旅行記錄模組腳本 -->
     <script src="travel-record.js"></script>
+    <!-- 添加 AR 導航模組腳本 -->
+    <script src="ar-navigation.js"></script>
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();

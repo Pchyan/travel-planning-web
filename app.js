@@ -261,6 +261,22 @@ function initEventListeners() {
         }
     });
 
+    // AR 導航按鈕事件
+    const arNavButton = document.getElementById('start-ar-navigation');
+    if (arNavButton) {
+        arNavButton.addEventListener('click', function() {
+            startARNavigation();
+        });
+    }
+
+    // 關閉 AR 導航按鈕事件
+    const closeArButton = document.getElementById('close-ar-navigation');
+    if (closeArButton) {
+        closeArButton.addEventListener('click', function() {
+            stopARNavigation();
+        });
+    }
+
     // 添加景点
     document.getElementById('add-destination').addEventListener('click', function() {
         const newDestinationInput = document.getElementById('new-destination').value.trim();
@@ -3737,6 +3753,79 @@ function openGoogleMapsSearch(location) {
     }, 1000);
 }
 
+// 啟動 AR 導航
+function startARNavigation() {
+    // 檢查是否有設置出發點和目的地
+    if (!startingPoint) {
+        alert('請先設置出發點！');
+        return;
+    }
+
+    if (destinations.length === 0) {
+        alert('請至少添加一個目的地！');
+        return;
+    }
+
+    // 準備目的地列表
+    const destinationsList = [];
+
+    // 添加出發點
+    destinationsList.push({
+        name: startingPoint.name,
+        coordinates: {
+            latitude: startingPoint.coordinates[0],
+            longitude: startingPoint.coordinates[1]
+        },
+        type: 'starting-point'
+    });
+
+    // 添加所有目的地
+    destinations.forEach((dest, index) => {
+        destinationsList.push({
+            name: dest.name,
+            coordinates: {
+                latitude: dest.coordinates[0],
+                longitude: dest.coordinates[1]
+            },
+            type: 'destination',
+            index: index + 1
+        });
+    });
+
+    // 調用 AR 導航模組的啟動函數
+    try {
+        ARNavigation.startARNavigation(destinationsList)
+            .then(success => {
+                if (success) {
+                    // 顯示 AR 容器
+                    document.getElementById('ar-container').classList.add('active');
+                    console.log('AR 導航已啟動');
+                }
+            })
+            .catch(error => {
+                console.error('AR 導航啟動失敗:', error);
+                alert(`AR 導航啟動失敗: ${error.message}`);
+            });
+    } catch (error) {
+        console.error('AR 導航啟動失敗:', error);
+        alert(`AR 導航啟動失敗: ${error.message}`);
+    }
+}
+
+// 停止 AR 導航
+function stopARNavigation() {
+    try {
+        // 調用 AR 導航模組的停止函數
+        ARNavigation.stopARNavigation();
+
+        // 隱藏 AR 容器
+        document.getElementById('ar-container').classList.remove('active');
+        console.log('AR 導航已停止');
+    } catch (error) {
+        console.error('AR 導航停止失敗:', error);
+    }
+}
+
 // 從URL解析經緯度參數
 function parseLocationFromUrl() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -5144,10 +5233,10 @@ function loadWeatherInfo(dayIndex, lat, lon, date) {
         </div>
     `;
 
-    // 獲取天氣資訊
-    WeatherService.getWeatherForDate(lat, lon, date)
-        .then(weatherData => {
-            if (weatherData.error) {
+    // 獲取天氣預報資料（包含未來7天）
+    WeatherService.getWeatherForecast(lat, lon)
+        .then(forecastData => {
+            if (forecastData.error) {
                 // 顯示錯誤訊息
                 weatherContainer.innerHTML = `
                     <div class="weather-toggle">
@@ -5157,11 +5246,43 @@ function loadWeatherInfo(dayIndex, lat, lon, date) {
                         </button>
                     </div>
                     <div class="weather-error" id="weather-details-${dayIndex}">
-                        無法獲取天氣資訊: ${weatherData.message}
+                        無法獲取天氣資訊: ${forecastData.message}
                     </div>
                 `;
                 return;
             }
+
+            // 更新行程概覽中的天氣摘要（只在第一天時更新）
+            if (dayIndex === 0) {
+                updateWeatherSummaryInOverview(forecastData);
+            }
+
+            // 計算日期差異（天數）
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const targetDate = new Date(date);
+            targetDate.setHours(0, 0, 0, 0);
+
+            const daysDiff = Math.round((targetDate - today) / (1000 * 60 * 60 * 24));
+
+            // 確保日期差異在有效範圍內
+            if (daysDiff < 0 || daysDiff >= forecastData.daily.length) {
+                weatherContainer.innerHTML = `
+                    <div class="weather-toggle">
+                        <h4><i class="fas fa-cloud-sun"></i> 天氣資訊</h4>
+                        <button onclick="toggleWeatherDetails(${dayIndex})">
+                            <i class="fas fa-chevron-down" id="weather-toggle-icon-${dayIndex}"></i>
+                        </button>
+                    </div>
+                    <div class="weather-error" id="weather-details-${dayIndex}">
+                        無法獲取指定日期的天氣資訊。日期超出可預報範圍。
+                    </div>
+                `;
+                return;
+            }
+
+            // 獲取指定日期的天氣資料
+            const weatherData = forecastData.daily[daysDiff];
 
             // 獲取天氣圖示 URL
             const iconUrl = WeatherService.getWeatherIconUrl(weatherData.weather.icon);
@@ -5187,6 +5308,74 @@ function loadWeatherInfo(dayIndex, lat, lon, date) {
                 `;
             }
 
+            // 生成天氣趨勢HTML
+            let trendHtml = '';
+            if (forecastData.daily && forecastData.daily.length > 0) {
+                // 取得未來7天的天氣趨勢（從當天開始）
+                const trendDays = forecastData.daily.slice(0, 7);
+
+                trendHtml = `
+                    <div class="weather-trend">
+                        <h4>未來7天天氣趨勢</h4>
+                        <div class="weather-trend-container">
+                            ${trendDays.map((day, i) => {
+                                const dayDate = new Date(day.date);
+                                const dayName = i === 0 ? '今天' : dayDate.toLocaleDateString('zh-TW', { weekday: 'short' });
+                                const dayTemp = Math.round(day.temp.day);
+                                const dayIcon = WeatherService.getWeatherIconUrl(day.weather.icon, '2x');
+                                const isActive = i === daysDiff ? 'active' : '';
+
+                                return `
+                                    <div class="weather-trend-day ${isActive}">
+                                        <div class="weather-trend-date">${dayName}</div>
+                                        <img src="${dayIcon}" alt="${day.weather.description}" class="weather-trend-icon">
+                                        <div class="weather-trend-temp">${dayTemp}°C</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 生成天氣警報HTML
+            let alertsHtml = '';
+            if (forecastData.hasAlerts && forecastData.warnings.length > 0) {
+                const warning = forecastData.warnings[0];
+                const startTime = warning.start.toLocaleString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const endTime = warning.end.toLocaleString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                alertsHtml = `
+                    <div class="weather-alert">
+                        <div class="weather-alert-header">
+                            <h4><i class="fas fa-exclamation-triangle"></i> ${warning.event}</h4>
+                            <button class="share-weather-btn" onclick="shareWeatherAlert('${warning.event}', '${warning.description}')">
+                                <i class="fas fa-share-alt"></i>
+                            </button>
+                        </div>
+                        <div class="weather-alert-content">${warning.description}</div>
+                        <div class="weather-alert-time">有效期間: ${startTime} - ${endTime}</div>
+                    </div>
+                `;
+            } else if (weatherData.hasWarning) {
+                // 如果沒有官方警報，但有危險天氣條件
+                alertsHtml = `
+                    <div class="weather-alert">
+                        <div class="weather-alert-header">
+                            <h4><i class="fas fa-exclamation-triangle"></i> 天氣注意事項</h4>
+                        </div>
+                        <div class="weather-alert-content">請注意可能的${weatherData.weather.description}天氣狀況，出行前請閱讀天氣建議。</div>
+                    </div>
+                `;
+            }
+
+            // 生成天氣摘要HTML
+            const summaryHtml = `
+                <div class="weather-summary">
+                    <i class="fas fa-info-circle"></i> ${forecastData.summary}
+                </div>
+            `;
+
             // 生成天氣資訊 HTML
             weatherContainer.innerHTML = `
                 <div class="weather-toggle">
@@ -5196,9 +5385,11 @@ function loadWeatherInfo(dayIndex, lat, lon, date) {
                     </button>
                 </div>
                 <div id="weather-details-${dayIndex}">
+                    ${alertsHtml}
+                    ${summaryHtml}
                     <div class="weather-header">
                         <img src="${iconUrl}" alt="${weatherData.weather.description}" class="weather-icon">
-                        <div class="weather-summary">
+                        <div class="weather-summary-header">
                             <h4>${weatherData.weather.description}</h4>
                             <p>${temp}°C (最低 ${tempMin}°C / 最高 ${tempMax}°C)</p>
                         </div>
@@ -5209,6 +5400,7 @@ function loadWeatherInfo(dayIndex, lat, lon, date) {
                         ${weatherData.pop ? `<div class="weather-detail"><i class="fas fa-cloud-rain"></i> 降雨機率: ${Math.round(weatherData.pop * 100)}%</div>` : ''}
                         <div class="weather-detail"><i class="fas fa-cloud"></i> 雲量: ${weatherData.clouds}%</div>
                     </div>
+                    ${trendHtml}
                     ${suggestionsHtml}
                 </div>
             `;
@@ -5245,6 +5437,84 @@ function toggleWeatherDetails(dayIndex) {
     }
 }
 
+// 分享天氣警報資訊
+function shareWeatherAlert(event, description) {
+    // 準備分享的文字
+    const shareText = `天氣警報: ${event}\n${description}\n\n來自旅行規劃助手的天氣資訊`;
+
+    // 如果支援Web Share API
+    if (navigator.share) {
+        navigator.share({
+            title: `天氣警報: ${event}`,
+            text: shareText
+        }).catch(error => {
+            console.error('分享失敗:', error);
+            fallbackShare(shareText);
+        });
+    } else {
+        fallbackShare(shareText);
+    }
+}
+
+// 備用分享方法（複製到剪貼簿）
+function fallbackShare(text) {
+    // 創建一個臨時文字區域
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+
+    // 選取文字並複製
+    textArea.focus();
+    textArea.select();
+
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            alert('天氣警報資訊已複製到剪貼簿，您可以將其分享給他人。');
+        } else {
+            alert('複製失敗，請手動複製警報資訊。');
+        }
+    } catch (err) {
+        alert('複製失敗，請手動複製警報資訊。');
+    }
+
+    // 移除臨時文字區域
+    document.body.removeChild(textArea);
+}
+
+// 更新行程概覽中的天氣摘要
+function updateWeatherSummaryInOverview(forecastData) {
+    if (!forecastData || forecastData.error) return;
+
+    // 尋找行程概覽區域
+    const summarySection = document.querySelector('.summary-section');
+    if (!summarySection) return;
+
+    // 檢查是否已存在天氣摘要
+    let weatherSummaryElement = document.getElementById('weather-summary-overview');
+
+    if (!weatherSummaryElement) {
+        // 如果不存在，則創建新的天氣摘要區域
+        weatherSummaryElement = document.createElement('div');
+        weatherSummaryElement.id = 'weather-summary-overview';
+        weatherSummaryElement.className = 'weather-summary';
+
+        // 將天氣摘要添加到行程概覽區域
+        const firstChild = summarySection.firstChild;
+        if (firstChild) {
+            summarySection.insertBefore(weatherSummaryElement, firstChild);
+        } else {
+            summarySection.appendChild(weatherSummaryElement);
+        }
+    }
+
+    // 更新天氣摘要內容
+    weatherSummaryElement.innerHTML = `<i class="fas fa-info-circle"></i> ${forecastData.summary}`;
+}
+
 // 顯示天氣API設置對話框
 function showWeatherSettings() {
     // 創建對話框
@@ -5258,7 +5528,7 @@ function showWeatherSettings() {
     // 設置對話框內容
     dialog.innerHTML = `
         <div class="weather-settings-header">
-            <h3>天氣API設置</h3>
+            <h3><i class="fas fa-cloud-sun"></i> 天氣API設置</h3>
             <button id="close-weather-settings">&times;</button>
         </div>
         <div class="weather-settings-content">
@@ -5267,10 +5537,21 @@ function showWeatherSettings() {
                 <label for="weather-api-key">API金鑰</label>
                 <input type="text" id="weather-api-key" value="${currentApiKey}" placeholder="請輸入您的OpenWeatherMap API金鑰">
             </div>
+            <div class="weather-settings-info">
+                <h4>天氣API功能說明</h4>
+                <ul>
+                    <li>顯示行程天數的天氣預報</li>
+                    <li>提供未來7天的天氣趨勢</li>
+                    <li>根據天氣狀況提供行程建議</li>
+                    <li>顯示天氣警報和特別提示</li>
+                </ul>
+                <p class="weather-api-note">注意：OpenWeatherMap免費帳戶每分鐘最多可發送60次請求，足以滿足一般使用需求。</p>
+            </div>
         </div>
         <div class="weather-settings-actions">
-            <button id="save-weather-settings" class="primary">儲存</button>
-            <button id="cancel-weather-settings" class="secondary">取消</button>
+            <button id="save-weather-settings" class="primary"><i class="fas fa-save"></i> 儲存</button>
+            <button id="test-weather-api" class="secondary"><i class="fas fa-vial"></i> 測試API</button>
+            <button id="cancel-weather-settings" class="secondary"><i class="fas fa-times"></i> 取消</button>
         </div>
     `;
 
@@ -5285,6 +5566,52 @@ function showWeatherSettings() {
     // 取消按鈕事件
     document.getElementById('cancel-weather-settings').addEventListener('click', () => {
         document.body.removeChild(dialog);
+    });
+
+    // 測試API按鈕事件
+    document.getElementById('test-weather-api').addEventListener('click', () => {
+        const apiKey = document.getElementById('weather-api-key').value.trim();
+
+        if (!apiKey) {
+            alert('請先輸入API金鑰再進行測試。');
+            return;
+        }
+
+        // 臨時儲存API金鑰進行測試
+        localStorage.setItem('weather_api_key_temp', apiKey);
+
+        // 使用臺北的座標進行測試
+        const testLat = 25.0330;
+        const testLon = 121.5654;
+
+        // 顯示測試中狀態
+        const testButton = document.getElementById('test-weather-api');
+        const originalText = testButton.innerHTML;
+        testButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 測試中...';
+        testButton.disabled = true;
+
+        // 嘗試獲取天氣資訊
+        fetch(`https://api.openweathermap.org/data/3.0/onecall?lat=${testLat}&lon=${testLon}&exclude=minutely,hourly&units=metric&lang=zh_tw&appid=${apiKey}`)
+            .then(response => {
+                // 移除臨時儲存的API金鑰
+                localStorage.removeItem('weather_api_key_temp');
+
+                if (response.ok) {
+                    alert('測試成功！API金鑰有效。');
+                } else {
+                    alert(`測試失敗！錯誤代碼: ${response.status}\n請確認您的API金鑰是否正確。`);
+                }
+            })
+            .catch(error => {
+                // 移除臨時儲存的API金鑰
+                localStorage.removeItem('weather_api_key_temp');
+                alert(`測試失敗！錯誤: ${error.message}`);
+            })
+            .finally(() => {
+                // 恢復按鈕狀態
+                testButton.innerHTML = originalText;
+                testButton.disabled = false;
+            });
     });
 
     // 儲存按鈕事件
