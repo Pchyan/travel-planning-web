@@ -2098,6 +2098,13 @@ function showTransportQueryDialog(defaultMode, defaultFrom, defaultTo, savedPref
             </div>
         </div>
 
+        <div style="margin-bottom: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+            <button id="view-transit-card" class="query-btn" style="background-color: #4a89dc; color: white; border: none; padding: 10px 0; border-radius: 6px; cursor: pointer; width: 100%; margin-bottom: 15px; font-weight: bold;">
+                <i class="fas fa-subway" style="margin-right: 8px;"></i> 查看當地交通卡資訊
+            </button>
+            <p style="margin-top: 5px; font-size: 13px; color: #666; text-align: center;">了解當地交通卡的購買地點、價格和使用方法</p>
+        </div>
+
         <div style="display: flex; justify-content: space-between;">
             <button id="query-transport" class="query-btn" style="background-color: #4CAF50; color: white; border: none; padding: 12px 0; border-radius: 6px; cursor: pointer; flex: 1; margin-right: 15px; font-weight: bold;">
                 <i class="fas fa-search" style="margin-right: 8px;"></i> 查詢交通路線
@@ -2130,6 +2137,24 @@ function showTransportQueryDialog(defaultMode, defaultFrom, defaultTo, savedPref
             // 更新選中的交通方式
             googleMapsMode = option.dataset.mode;
         });
+    });
+
+    // 交通卡資訊按鈕點擊事件
+    document.getElementById('view-transit-card').addEventListener('click', () => {
+        // 獲取當前國家和城市
+        const customFrom = document.getElementById('from-location').value.trim();
+        const customTo = document.getElementById('to-location').value.trim();
+
+        // 嘗試從起點或終點識別國家和城市
+        let country = currentCountry;
+        let city = currentCity;
+
+        // 如果有 TransitCardService 模組，則顯示交通卡資訊
+        if (typeof TransitCardService !== 'undefined' && typeof TransitCardService.showTransitCardPanel === 'function') {
+            TransitCardService.showTransitCardPanel(country, city);
+        } else {
+            alert('交通卡資訊功能尚未載入，請確保 transit-card.js 已正確引入');
+        }
     });
 
     // 查詢按鈕點擊事件

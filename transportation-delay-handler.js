@@ -172,6 +172,13 @@ function testTransportationDelay() {
 function openScheduleQuery(mode, from, to) {
     console.log(`查詢交通時刻表: ${mode} 從 ${from} 到 ${to}`);
 
+    // 如果全局程式中已定義了交通查詢函數，則使用它
+    if (typeof window.openScheduleQuery === 'function') {
+        window.openScheduleQuery(mode, from, to);
+        return;
+    }
+
+    // 否則使用預設的查詢方式
     // 根據交通方式選擇適當的查詢網站
     let queryUrl = '';
 

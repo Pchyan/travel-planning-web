@@ -17,7 +17,8 @@
     <link rel="stylesheet" href="travel-record.css" />
     <!-- 添加天氣服務模組樣式 -->
     <link rel="stylesheet" href="weather-styles.css" />
-
+    <!-- 添加交通卡資訊模組樣式 -->
+    <link rel="stylesheet" href="transit-card.css" />
     <!-- 添加智慧行程建議模組樣式 -->
     <link rel="stylesheet" href="smart-recommendation.css" />
     <!-- 添加預算追蹤模組樣式 -->
@@ -175,7 +176,7 @@
             <p>旅遊規劃助手 &copy; <span id="current-year">2023</span></p>
             <p class="footer-note">使用 Font Awesome 圖示與 Leaflet 地圖技術</p>
             <div class="test-buttons">
-
+                <button id="test-transit-card" class="test-button">測試交通卡資訊</button>
                 <button id="test-transportation-delay" class="test-button">測試交通延誤</button>
             </div>
         </footer>
@@ -528,6 +529,8 @@
     <script src="attraction-database.js"></script>
     <!-- 添加本地景點圖片資料庫 -->
     <script src="local-attraction-images.js"></script>
+    <!-- 添加交通卡資料庫 -->
+    <script src="transit-cards.js"></script>
     <!-- 添加智慧行程建議模組 -->
     <script src="smart-itinerary-recommender.js"></script>
     <script src="app.js"></script>
@@ -537,6 +540,8 @@
     <script src="smart-recommendation-ui.js"></script>
     <!-- 添加預算追蹤模組腳本 -->
     <script src="budget-tracker.js"></script>
+    <!-- 添加交通卡資訊模組腳本 -->
+    <script src="transit-card.js"></script>
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
@@ -561,6 +566,20 @@
                 } else {
                     console.error('交通延認測試函數未找到');
                     alert('交通延認測試函數未找到，請確保 transportation-delay-handler.js 已正確載入');
+                }
+            });
+        }
+
+        // 測試交通卡資訊按鈕
+        const testTransitCardButton = document.getElementById('test-transit-card');
+        if (testTransitCardButton) {
+            testTransitCardButton.addEventListener('click', function() {
+                if (typeof TransitCardService !== 'undefined' && typeof TransitCardService.testTransitCardInfo === 'function') {
+                    TransitCardService.testTransitCardInfo();
+                    console.log('交通卡資訊測試已啟動');
+                } else {
+                    console.error('交通卡資訊測試函數未找到');
+                    alert('交通卡資訊測試函數未找到，請確保 transit-card.js 已正確載入');
                 }
             });
         }

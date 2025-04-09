@@ -1,0 +1,493 @@
+/* 交通卡資訊模組樣式 */
+
+.transit-card-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(3px);
+    overflow-y: auto;
+}
+
+.transit-card-panel {
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.transit-card-header {
+    background-color: #4a89dc;
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.transit-card-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.transit-card-header h2 i {
+    margin-right: 10px;
+}
+
+.transit-card-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.transit-card-close:hover {
+    transform: scale(1.1);
+}
+
+.transit-card-content {
+    padding: 20px;
+}
+
+.transit-card-search {
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.transit-card-search select, .transit-card-search input {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    flex: 1;
+}
+
+.transit-card-search button {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 15px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.transit-card-search button:hover {
+    background-color: #3a79cc;
+}
+
+.transit-card-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.transit-card-item {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    background-color: #fff;
+}
+
+.transit-card-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.transit-card-item-header {
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.transit-card-logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    border-radius: 5px;
+    background-color: #fff;
+    padding: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.transit-card-name {
+    flex: 1;
+}
+
+.transit-card-name h3 {
+    margin: 0 0 5px 0;
+    font-size: 1.2rem;
+}
+
+.transit-card-name p {
+    margin: 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.transit-card-item-body {
+    padding: 15px;
+}
+
+.transit-card-info {
+    margin-bottom: 15px;
+}
+
+.transit-card-info h4 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+    color: #333;
+    display: flex;
+    align-items: center;
+}
+
+.transit-card-info h4 i {
+    margin-right: 8px;
+    color: #4a89dc;
+}
+
+.transit-card-info p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.transit-card-info ul {
+    margin: 5px 0 0 0;
+    padding-left: 25px;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.transit-card-info ul li {
+    margin-bottom: 3px;
+}
+
+.transit-card-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.transit-card-actions button {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background-color 0.2s;
+}
+
+.transit-card-actions .view-map {
+    background-color: #4a89dc;
+    color: white;
+}
+
+.transit-card-actions .view-map:hover {
+    background-color: #3a79cc;
+}
+
+.transit-card-actions .view-website {
+    background-color: #28a745;
+    color: white;
+}
+
+.transit-card-actions .view-website:hover {
+    background-color: #218838;
+}
+
+.transit-card-detail {
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    animation: slideIn 0.3s ease-out;
+    display: none;
+}
+
+.transit-card-detail.active {
+    display: block;
+}
+
+.transit-card-detail-header {
+    background-color: #4a89dc;
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.transit-card-detail-content {
+    padding: 20px;
+}
+
+.transit-card-detail-info {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.transit-card-detail-logo {
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+    border-radius: 8px;
+    background-color: #fff;
+    padding: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.transit-card-detail-name {
+    flex: 1;
+}
+
+.transit-card-detail-name h3 {
+    margin: 0 0 10px 0;
+    font-size: 1.5rem;
+}
+
+.transit-card-detail-name p {
+    margin: 0;
+    color: #666;
+    font-size: 1rem;
+}
+
+.transit-card-detail-section {
+    margin-bottom: 20px;
+}
+
+.transit-card-detail-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 1.1rem;
+    color: #333;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+.transit-card-detail-section h4 i {
+    margin-right: 8px;
+    color: #4a89dc;
+}
+
+.transit-card-detail-section p {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+    color: #555;
+}
+
+.transit-card-detail-section ul {
+    margin: 5px 0 0 0;
+    padding-left: 25px;
+    font-size: 1rem;
+    color: #555;
+}
+
+.transit-card-detail-section ul li {
+    margin-bottom: 5px;
+}
+
+.purchase-locations {
+    margin-top: 15px;
+}
+
+.purchase-location-item {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background-color: #f8f9fa;
+}
+
+.purchase-location-item h5 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+    color: #333;
+}
+
+.purchase-location-item p {
+    margin: 0 0 8px 0;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.purchase-location-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.purchase-location-actions button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background-color 0.2s;
+}
+
+.purchase-location-actions .view-on-map {
+    background-color: #4a89dc;
+    color: white;
+}
+
+.purchase-location-actions .view-on-map:hover {
+    background-color: #3a79cc;
+}
+
+.purchase-location-actions .get-directions {
+    background-color: #28a745;
+    color: white;
+}
+
+.purchase-location-actions .get-directions:hover {
+    background-color: #218838;
+}
+
+.transit-card-map {
+    height: 300px;
+    border-radius: 8px;
+    margin-top: 15px;
+    border: 1px solid #ddd;
+}
+
+.transit-card-back-button {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 8px 15px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 20px;
+    transition: background-color 0.2s;
+}
+
+.transit-card-back-button:hover {
+    background-color: #5a6268;
+}
+
+.transit-card-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+}
+
+.transit-card-empty i {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    display: block;
+}
+
+.transit-card-empty p {
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .transit-card-list {
+        grid-template-columns: 1fr;
+    }
+    
+    .transit-card-detail-info {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    .transit-card-search {
+        flex-direction: column;
+    }
+}
+
+/* 交通卡入口按鈕樣式 */
+.transit-card-button {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.transit-card-button:hover {
+    background-color: #3a79cc;
+}
+
+/* 測試按鈕樣式 */
+#test-transit-card {
+    background-color: #6f42c1;
+}
+
+#test-transit-card:hover {
+    background-color: #5e35b1;
+}
