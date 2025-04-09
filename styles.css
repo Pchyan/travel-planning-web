@@ -26,6 +26,175 @@ header {
     color: white;
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.header-buttons {
+    margin-top: 10px;
+}
+
+/* 交通延誤通知樣式 */
+.transportation-alerts {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    margin-bottom: 20px;
+    overflow: hidden;
+    border-left: 5px solid #e74c3c;
+    transition: all 0.3s ease;
+    max-height: 600px;
+    opacity: 1;
+}
+
+.transportation-alerts.hidden {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.alert-header {
+    background-color: #f8d7da;
+    padding: 12px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f5c6cb;
+}
+
+.alert-header h3 {
+    color: #721c24;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+}
+
+.alert-header h3 i {
+    margin-right: 8px;
+}
+
+.alert-header .close-button {
+    background: none;
+    border: none;
+    color: #721c24;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 5px;
+}
+
+.alert-content {
+    padding: 15px;
+}
+
+.delay-info {
+    margin-bottom: 15px;
+}
+
+.delay-message {
+    font-weight: bold;
+    font-size: 15px;
+    margin-bottom: 5px;
+}
+
+.delay-time {
+    color: #666;
+    font-size: 14px;
+}
+
+.alternatives-container h4 {
+    font-size: 15px;
+    margin-bottom: 10px;
+    color: #495057;
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 5px;
+}
+
+.alternatives-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.alternative-route {
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 12px;
+    border: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.alternative-route:hover {
+    background-color: #e9ecef;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.route-info {
+    flex: 1;
+}
+
+.route-mode {
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+}
+
+.route-mode i {
+    margin-right: 5px;
+    width: 20px;
+    text-align: center;
+}
+
+.route-details {
+    display: flex;
+    gap: 15px;
+    font-size: 14px;
+    color: #666;
+}
+
+.route-time, .route-delay, .route-crowd {
+    display: flex;
+    align-items: center;
+}
+
+.route-time i, .route-delay i, .route-crowd i {
+    margin-right: 5px;
+    font-size: 12px;
+}
+
+.route-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.route-actions button {
+    background-color: #4a89dc;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s ease;
+}
+
+.route-actions button:hover {
+    background-color: #3a6fc1;
+}
+
+.route-actions button.secondary {
+    background-color: #6c757d;
+}
+
+.route-actions button.secondary:hover {
+    background-color: #5a6268;
 }
 
 .transport-note {
@@ -353,6 +522,57 @@ footer {
 .footer-note {
     margin-top: 5px;
     font-size: 0.8em;
+}
+
+/* 測試按鈕樣式 */
+.test-buttons {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px dashed #ddd;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.test-button {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.test-button:hover {
+    background-color: #5a6268;
+    transform: translateY(-2px);
+}
+
+#test-ar-button {
+    background-color: #e74c3c;
+}
+
+#test-ar-button:hover {
+    background-color: #d62c1a;
+}
+
+#stop-test-ar-button {
+    background-color: #3498db;
+}
+
+#stop-test-ar-button:hover {
+    background-color: #217dbb;
+}
+
+#test-transportation-delay {
+    background-color: #f39c12;
+}
+
+#test-transportation-delay:hover {
+    background-color: #d68910;
 }
 
 /* 檢視模式切換按鈕 */

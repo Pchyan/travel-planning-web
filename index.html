@@ -30,10 +30,25 @@
     <div class="container">
         <header>
             <h1>旅行規劃助手</h1>
-            <!-- 移除頂部所有按鈕 -->
-            <button id="test-ar-button" style="background-color: #e74c3c; color: white; padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">測試 AR 導航</button>
-            <button id="stop-test-ar-button" style="background-color: #3498db; color: white; padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer;">關閉測試 AR</button>
         </header>
+
+        <!-- 交通延誤通知容器 -->
+        <div id="transportation-alerts" class="transportation-alerts hidden">
+            <div class="alert-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> 交通延誤通知</h3>
+                <button id="close-transportation-alert" class="close-button"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="alert-content">
+                <div class="delay-info">
+                    <p class="delay-message"></p>
+                    <p class="delay-time"></p>
+                </div>
+                <div class="alternatives-container">
+                    <h4>替代路線建議</h4>
+                    <div class="alternatives-list"></div>
+                </div>
+            </div>
+        </div>
 
         <main>
             <section class="input-section">
@@ -154,6 +169,11 @@
         <footer>
             <p>旅遊規劃助手 &copy; <span id="current-year">2023</span></p>
             <p class="footer-note">使用 Font Awesome 圖示與 Leaflet 地圖技術</p>
+            <div class="test-buttons">
+                <button id="test-ar-button" class="test-button">測試 AR 導航</button>
+                <button id="stop-test-ar-button" class="test-button">關閉測試 AR</button>
+                <button id="test-transportation-delay" class="test-button">測試交通延誤</button>
+            </div>
         </footer>
     </div>
 
@@ -227,6 +247,12 @@
     <script src="weather-service.js"></script>
     <!-- 添加 AR 導航模組腳本 -->
     <script src="ar-navigation.js"></script>
+    <!-- 添加交通服務模組腳本 -->
+    <script src="transportation-service.js"></script>
+    <!-- 添加交通延誤處理模組腳本 -->
+    <script src="transportation-delay-handler.js"></script>
+    <!-- 添加交通延誤初始化腳本 -->
+    <script src="init-transportation-delay.js"></script>
     <script src="app.js"></script>
     <!-- 添加旅行記錄模組腳本 -->
     <script src="travel-record.js"></script>

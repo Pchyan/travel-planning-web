@@ -480,11 +480,27 @@ function initEventListeners() {
 // 设置出发点
 async function setStartingPoint(location) {
     try {
-        const coordinates = await geocodeLocation(location);
+        let coordinates;
+
+        // 檢查緩存中是否有該位置的經緯度資料
+        if (locationCache[location]) {
+            // 使用緩存的經緯度資料
+            coordinates = locationCache[location];
+            console.log(`使用緩存中的經緯度資料設定出發點: ${location} -> [${coordinates[0]}, ${coordinates[1]}]`);
+        } else {
+            // 執行地理編碼獲取經緯度
+            coordinates = await geocodeLocation(location);
+
+            // 將新的地點加入緩存
+            locationCache[location] = coordinates;
+            localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(locationCache));
+            console.log(`將新地點加入緩存: ${location} -> [${coordinates[0]}, ${coordinates[1]}]`);
+        }
+
         startingPoint = {
             name: location,
             coordinates: coordinates,
-            stayDuration: 0 // 出发点不计入停留时间
+            stayDuration: 0 // 出發點不計入停留時間
         };
 
         // 更新地图
@@ -499,8 +515,21 @@ async function setStartingPoint(location) {
 
         console.log(`出發點設置為: ${location}`);
     } catch (error) {
-        alert(`無法找到位置: ${location}。請嘗試更具體的地址。`);
         console.error('Geocoding error:', error);
+
+        // 詢問用戶是否要在Google地圖中搜索該位置
+        const useGoogleMaps = confirm(`無法找到位置: ${location}。\n\n是否要在Google地圖中搜索此位置？\n（您可以在Google地圖中找到正確位置後，使用經緯度來設定）`);
+
+        if (useGoogleMaps) {
+            // 打開Google地圖搜索該位置
+            openGoogleMapsSearch(location);
+
+            // 自動切換到經緯度輸入模式
+            toggleCoordinatesInputMode();
+
+            // 預先填入位置名稱
+            document.getElementById('coordinates-name').value = location;
+        }
     }
 
     // 保存當前狀態
