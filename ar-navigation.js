@@ -380,6 +380,9 @@ const ARNavigation = (function() {
             return false;
         }
 
+        // 初始化相機視訊
+        initCameraFeed();
+
         // 初始化 AR 元素
         initARElements();
 
@@ -396,6 +399,84 @@ const ARNavigation = (function() {
         isARActive = true;
 
         return true;
+    }
+
+    // 初始化相機視訊
+    async function initCameraFeed() {
+        try {
+            console.log('初始化相機視訊');
+
+            // 獲取視訊元素
+            const videoElement = document.getElementById('ar-camera-feed');
+            if (!videoElement) {
+                console.error('相機視訊元素不存在');
+                return false;
+            }
+
+            // 確保視訊元素可見
+            videoElement.style.display = 'block';
+
+            // 獲取相機權限並啟動視訊
+            const constraints = {
+                video: {
+                    facingMode: 'environment',  // 使用後置相機（如果有）
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            console.log('請求相機權限中...', constraints);
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('相機權限已授予');
+
+            // 將視訊流設置到視訊元素
+            videoElement.srcObject = stream;
+
+            // 等待視訊元素載入
+            await new Promise((resolve) => {
+                videoElement.onloadedmetadata = () => {
+                    console.log('相機視訊已載入，尺寸:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+                    resolve();
+                };
+
+                // 添加超時處理
+                setTimeout(() => {
+                    if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+                        console.log('相機視訊已就緒（超時解決）');
+                        resolve();
+                    }
+                }, 3000); // 3 秒超時
+            });
+
+            // 啟動視訊播放
+            try {
+                await videoElement.play();
+                console.log('相機視訊已啟動播放');
+
+                // 更新 A-Frame 場景中的視訊平面
+                const videoPlane = document.getElementById('ar-video-plane');
+                if (videoPlane) {
+                    videoPlane.setAttribute('material', 'src', '#ar-camera-feed');
+                    videoPlane.setAttribute('material', 'shader', 'flat');
+                    console.log('已更新視訊平面材質');
+                }
+            } catch (playError) {
+                console.error('啟動視訊播放失敗:', playError);
+                // 嘗試使用非自動播放方式
+                videoElement.setAttribute('autoplay', '');
+                videoElement.setAttribute('playsinline', '');
+                videoElement.setAttribute('muted', '');
+                videoElement.muted = true;
+                videoElement.play().catch(e => console.error('再次嘗試播放失敗:', e));
+            }
+
+            return true;
+        } catch (error) {
+            console.error('初始化相機視訊失敗:', error);
+            alert(`無法啟動相機: ${error.message}`);
+            return false;
+        }
     }
 
     // 初始化 AR 元素
@@ -1045,6 +1126,9 @@ const ARNavigation = (function() {
         // 標記為非活動狀態
         isARActive = false;
 
+        // 停止相機視訊
+        stopCameraFeed();
+
         // 解鎖屏幕方向
         unlockScreenOrientation();
 
@@ -1052,6 +1136,36 @@ const ARNavigation = (function() {
         vibrate([100, 50, 100]);
 
         return true;
+    }
+
+    // 停止相機視訊
+    function stopCameraFeed() {
+        try {
+            console.log('停止相機視訊');
+
+            // 獲取視訊元素
+            const videoElement = document.getElementById('ar-camera-feed');
+            if (!videoElement) {
+                console.error('相機視訊元素不存在');
+                return false;
+            }
+
+            // 停止視訊播放
+            videoElement.pause();
+
+            // 停止所有視訊軌道
+            if (videoElement.srcObject) {
+                const tracks = videoElement.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+
+            console.log('相機視訊已停止');
+            return true;
+        } catch (error) {
+            console.error('停止相機視訊失敗:', error);
+            return false;
+        }
     }
 
     // 鎖定屏幕方向為縱向

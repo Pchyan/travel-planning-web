@@ -159,8 +159,13 @@
 
     <!-- AR 導航容器 -->
     <div id="ar-container" class="ar-container">
+        <!-- 相機視訊影像資源 -->
+        <video id="ar-camera-feed" autoplay playsinline muted></video>
         <!-- A-Frame AR 場景 -->
-        <a-scene id="ar-scene" class="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;">
+        <a-scene id="ar-scene" class="ar-scene" embedded vr-mode-ui="enabled: false" renderer="antialias: true; alpha: true; logarithmicDepthBuffer: true;">
+            <!-- 相機設置 -->
+            <a-entity camera look-controls wasd-controls="enabled: false" position="0 1.6 0"></a-entity>
+
             <!-- 目的地標記將在運行時動態添加 -->
 
             <!-- 方向指示器 -->
@@ -174,8 +179,10 @@
                 <a-text id="destination-text" value="目的地" position="0 1 0" align="center" color="white" scale="2 2 2"></a-text>
             </a-entity>
 
-            <!-- 相機實體 -->
-            <a-entity camera></a-entity>
+            <!-- 添加視訊影像平面 -->
+            <a-entity id="ar-video-container" position="0 0 0">
+                <a-plane id="ar-video-plane" position="0 0 -10" width="16" height="9" scale="2 2 2" material="shader: flat; src: #ar-camera-feed; transparent: true; opacity: 1"></a-plane>
+            </a-entity>
         </a-scene>
 
         <!-- AR UI 元素 -->
