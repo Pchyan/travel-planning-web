@@ -263,10 +263,15 @@ function initEventListeners() {
 
     // AR 導航按鈕事件
     const arNavButton = document.getElementById('start-ar-navigation');
+    console.log('AR 導航按鈕元素:', arNavButton);
     if (arNavButton) {
         arNavButton.addEventListener('click', function() {
+            console.log('AR 導航按鈕被點擊');
             startARNavigation();
         });
+        console.log('AR 導航按鈕事件已設置');
+    } else {
+        console.error('AR 導航按鈕元素不存在');
     }
 
     // 關閉 AR 導航按鈕事件
@@ -3755,13 +3760,21 @@ function openGoogleMapsSearch(location) {
 
 // 啟動 AR 導航
 function startARNavigation() {
+    console.log('開始執行 startARNavigation 函數');
+    console.log('ARNavigation 對象存在性檢查:', typeof ARNavigation !== 'undefined' ? '存在' : '不存在');
+
     // 檢查是否有設置出發點和目的地
+    console.log('出發點:', startingPoint);
+    console.log('目的地列表:', destinations);
+
     if (!startingPoint) {
+        console.error('缺少出發點');
         alert('請先設置出發點！');
         return;
     }
 
     if (destinations.length === 0) {
+        console.error('缺少目的地');
         alert('請至少添加一個目的地！');
         return;
     }
@@ -3793,21 +3806,39 @@ function startARNavigation() {
     });
 
     // 調用 AR 導航模組的啟動函數
+    console.log('準備調用 AR 導航模組');
+    console.log('目的地列表數據:', destinationsList);
+
     try {
+        console.log('開始調用 ARNavigation.startARNavigation');
+        if (typeof ARNavigation === 'undefined' || typeof ARNavigation.startARNavigation !== 'function') {
+            throw new Error('ARNavigation 模組或 startARNavigation 方法不存在');
+        }
+
         ARNavigation.startARNavigation(destinationsList)
             .then(success => {
+                console.log('ARNavigation.startARNavigation 返回成功:', success);
                 if (success) {
                     // 顯示 AR 容器
-                    document.getElementById('ar-container').classList.add('active');
-                    console.log('AR 導航已啟動');
+                    const arContainer = document.getElementById('ar-container');
+                    console.log('AR 容器元素:', arContainer);
+                    if (arContainer) {
+                        arContainer.classList.add('active');
+                        console.log('AR 導航已啟動，容器已顯示');
+                    } else {
+                        console.error('AR 容器元素不存在');
+                        alert('AR 容器元素不存在，無法顯示 AR 導航界面');
+                    }
+                } else {
+                    console.warn('ARNavigation.startARNavigation 返回失敗');
                 }
             })
             .catch(error => {
-                console.error('AR 導航啟動失敗:', error);
+                console.error('AR 導航啟動失敗 (Promise 錯誤):', error);
                 alert(`AR 導航啟動失敗: ${error.message}`);
             });
     } catch (error) {
-        console.error('AR 導航啟動失敗:', error);
+        console.error('AR 導航啟動失敗 (try-catch 錯誤):', error);
         alert(`AR 導航啟動失敗: ${error.message}`);
     }
 }

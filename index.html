@@ -31,6 +31,8 @@
         <header>
             <h1>旅行規劃助手</h1>
             <!-- 移除頂部所有按鈕 -->
+            <button id="test-ar-button" style="background-color: #e74c3c; color: white; padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">測試 AR 導航</button>
+            <button id="stop-test-ar-button" style="background-color: #3498db; color: white; padding: 5px 10px; border: none; border-radius: 5px; cursor: pointer;">關閉測試 AR</button>
         </header>
 
         <main>
@@ -210,20 +212,110 @@
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 
     <!-- AR.js 框架 -->
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@master/aframe/build/aframe-ar.js"></script>
 
     <!-- 專案腳本 -->
     <script src="transportationSystems.js"></script>
     <!-- 添加天氣服務模組腳本 -->
     <script src="weather-service.js"></script>
+    <!-- 添加 AR 導航模組腳本 -->
+    <script src="ar-navigation.js"></script>
     <script src="app.js"></script>
     <!-- 添加旅行記錄模組腳本 -->
     <script src="travel-record.js"></script>
-    <!-- 添加 AR 導航模組腳本 -->
-    <script src="ar-navigation.js"></script>
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
+
+        // 測試 ARNavigation 對象是否正確加載
+        console.log('ARNavigation 對象測試:', typeof ARNavigation);
+        if (typeof ARNavigation !== 'undefined') {
+            console.log('ARNavigation 方法測試:', {
+                init: typeof ARNavigation.init,
+                startARNavigation: typeof ARNavigation.startARNavigation,
+                stopARNavigation: typeof ARNavigation.stopARNavigation,
+                isSupported: typeof ARNavigation.isSupported
+            });
+
+            // 測試按鈕事件
+            const testArButton = document.getElementById('test-ar-button');
+            if (testArButton) {
+                testArButton.addEventListener('click', function() {
+                    console.log('測試 AR 導航按鈕被點擊');
+
+                    // 創建測試數據
+                    const testData = [
+                        {
+                            name: '測試出發點',
+                            coordinates: {
+                                latitude: 25.0330,
+                                longitude: 121.5654
+                            },
+                            type: 'starting-point'
+                        },
+                        {
+                            name: '測試目的地',
+                            coordinates: {
+                                latitude: 25.0340,
+                                longitude: 121.5664
+                            },
+                            type: 'destination',
+                            index: 1
+                        }
+                    ];
+
+                    // 直接調用 AR 導航模組
+                    try {
+                        ARNavigation.startARNavigation(testData)
+                            .then(success => {
+                                if (success) {
+                                    // 顯示 AR 容器
+                                    document.getElementById('ar-container').classList.add('active');
+                                    console.log('AR 導航測試已啟動');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('AR 導航測試失敗:', error);
+                                alert(`AR 導航測試失敗: ${error.message}`);
+                            });
+                    } catch (error) {
+                        console.error('AR 導航測試失敗:', error);
+                        alert(`AR 導航測試失敗: ${error.message}`);
+                    }
+                });
+                console.log('測試按鈕事件已設置');
+            } else {
+                console.error('測試按鈕元素不存在');
+            }
+
+            // 關閉測試 AR 導航按鈕事件
+            const stopTestArButton = document.getElementById('stop-test-ar-button');
+            if (stopTestArButton) {
+                stopTestArButton.addEventListener('click', function() {
+                    console.log('關閉測試 AR 導航按鈕被點擊');
+
+                    try {
+                        // 調用 AR 導航模組的停止函數
+                        ARNavigation.stopARNavigation();
+
+                        // 隱藏 AR 容器
+                        const arContainer = document.getElementById('ar-container');
+                        if (arContainer) {
+                            arContainer.classList.remove('active');
+                            console.log('AR 導航測試已停止，容器已隱藏');
+                        } else {
+                            console.error('AR 容器元素不存在');
+                        }
+                    } catch (error) {
+                        console.error('AR 導航測試停止失敗:', error);
+                        alert(`AR 導航測試停止失敗: ${error.message}`);
+                    }
+                });
+                console.log('關閉測試按鈕事件已設置');
+            } else {
+                console.error('關閉測試按鈕元素不存在');
+            }
+        }
     </script>
 </body>
 </html>
