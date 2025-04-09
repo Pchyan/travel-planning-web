@@ -4,7 +4,7 @@ const WeatherService = (function() {
     let API_KEY = ''; // 將從本地儲存中讀取
 
     // API基礎URL
-    const BASE_URL = 'https://api.openweathermap.org/data/3.0';
+    const BASE_URL = 'https://api.openweathermap.org/data/2.5';
 
     // 天氣圖示URL
     const ICON_URL = 'https://openweathermap.org/img/wn/';
@@ -101,8 +101,9 @@ const WeatherService = (function() {
         }
 
         try {
-            // 使用One Call API獲取未來7天的預報，包含警報
-            const response = await fetch(`${BASE_URL}/onecall?lat=${lat}&lon=${lon}&exclude=minutely,hourly&units=metric&lang=zh_tw&appid=${API_KEY}`);
+            // 使用 One Call API 獲取未來 7 天的預報
+            // 注意：如果使用 2.5 版本，需要使用 forecast 而非 onecall
+            const response = await fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&units=metric&lang=zh_tw&appid=${API_KEY}`);
 
             if (!response.ok) {
                 throw new Error(`API請求失敗: ${response.status} ${response.statusText}`);
@@ -111,55 +112,112 @@ const WeatherService = (function() {
             const data = await response.json();
 
             // 添加額外資訊
-            const cityName = data.timezone.split('/').pop().replace(/_/g, ' ');
+            const cityName = data.city ? data.city.name : '未知城市';
 
-            // 為每天添加日期資訊
+            // 創建兼容 onecall API 的數據結構
+            const processedData = {
+                city: cityName,
+                timezone: data.city ? data.city.timezone : 0,
+                daily: [],
+                hasAlerts: false,
+                warnings: []
+            };
+
+            // 將 forecast API 的數據轉換為每日預報
+            // forecast API 返回的是每 3 小時的預報，我們需要將其合併為每日預報
+            const dailyForecasts = {};
+
+            // 當前日期
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
-            data.daily.forEach((day, index) => {
-                const forecastDate = new Date(today);
-                forecastDate.setDate(today.getDate() + index);
-                day.date = forecastDate.toISOString().split('T')[0];
-                day.city = cityName;
-                day.forecast_type = 'daily';
+            // 處理每 3 小時的預報數據
+            data.list.forEach(item => {
+                // 獲取預報日期
+                const forecastDate = new Date(item.dt * 1000);
+                const dateStr = forecastDate.toISOString().split('T')[0];
 
-                // 添加天氣警報標記
-                day.hasWarning = checkWeatherWarning(day);
+                // 如果這個日期還沒有添加到每日預報中，則初始化
+                if (!dailyForecasts[dateStr]) {
+                    dailyForecasts[dateStr] = {
+                        date: dateStr,
+                        city: cityName,
+                        forecast_type: 'daily',
+                        temp: {
+                            day: 0,
+                            min: 100, // 初始化為高值，方便找最小值
+                            max: -100 // 初始化為低值，方便找最大值
+                        },
+                        humidity: 0,
+                        pressure: 0,
+                        wind_speed: 0,
+                        wind_deg: 0,
+                        clouds: 0,
+                        weather: null,
+                        count: 0, // 用來計算平均值
+                        hasWarning: false
+                    };
+                }
+
+                // 更新每日預報數據
+                const daily = dailyForecasts[dateStr];
+                daily.count++;
+
+                // 更新溫度
+                daily.temp.day += item.main.temp;
+                daily.temp.min = Math.min(daily.temp.min, item.main.temp_min);
+                daily.temp.max = Math.max(daily.temp.max, item.main.temp_max);
+
+                // 更新其他數據
+                daily.humidity += item.main.humidity;
+                daily.pressure += item.main.pressure;
+                daily.wind_speed += item.wind.speed;
+                daily.wind_deg += item.wind.deg;
+                daily.clouds += item.clouds.all;
+
+                // 取最新的天氣狀況
+                daily.weather = item.weather[0];
+
+                // 檢查是否有天氣警報
+                if (item.weather[0].id < 800) {
+                    daily.hasWarning = true;
+                }
             });
 
-            // 添加天氣警報摘要
-            data.warnings = [];
+            // 計算平均值並添加到每日預報中
+            Object.values(dailyForecasts).forEach(daily => {
+                if (daily.count > 0) {
+                    daily.temp.day /= daily.count;
+                    daily.humidity /= daily.count;
+                    daily.pressure /= daily.count;
+                    daily.wind_speed /= daily.count;
+                    daily.wind_deg /= daily.count;
+                    daily.clouds /= daily.count;
+                    delete daily.count; // 移除計數器
 
-            // 如果有警報數據，則處理警報
-            if (data.alerts && data.alerts.length > 0) {
-                data.hasAlerts = true;
-                data.alerts.forEach(alert => {
-                    data.warnings.push({
-                        event: alert.event,
-                        description: alert.description,
-                        start: new Date(alert.start * 1000),
-                        end: new Date(alert.end * 1000),
-                        sender: alert.sender_name
-                    });
-                });
-            } else {
-                data.hasAlerts = false;
-            }
+                    processedData.daily.push(daily);
+                }
+            });
+
+            // 按日期排序
+            processedData.daily.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // 限制為 7 天
+            processedData.daily = processedData.daily.slice(0, 7);
 
             // 添加天氣摘要
-            data.summary = generateWeatherSummary(data);
+            processedData.summary = generateWeatherSummary(processedData);
 
             // 緩存結果
             weatherCache[cacheKey] = {
                 timestamp: Date.now(),
-                data: data
+                data: processedData
             };
 
             // 保存緩存到本地儲存
             saveCacheToStorage();
 
-            return data;
+            return processedData;
         } catch (error) {
             console.error('獲取天氣預報時發生錯誤:', error);
             return {
@@ -214,19 +272,22 @@ const WeatherService = (function() {
         }
 
         // 獲取未來3天的天氣資料
-        const nextThreeDays = forecastData.daily.slice(0, 3);
+        const nextThreeDays = forecastData.daily.slice(0, Math.min(3, forecastData.daily.length));
 
         // 檢查是否有警報
         const hasWarnings = nextThreeDays.some(day => day.hasWarning);
 
         // 計算降雨天數
         const rainyDays = nextThreeDays.filter(day => {
+            if (!day.weather || !day.weather.id) return false;
             const weatherId = day.weather.id;
-            return (weatherId >= 200 && weatherId < 700) || day.pop > 0.5;
+            return (weatherId >= 200 && weatherId < 700) || (day.pop && day.pop > 0.5);
         }).length;
 
         // 計算平均溫度
-        const avgTemp = nextThreeDays.reduce((sum, day) => sum + day.temp.day, 0) / nextThreeDays.length;
+        const avgTemp = nextThreeDays.reduce((sum, day) => {
+            return sum + (day.temp && day.temp.day ? day.temp.day : 0);
+        }, 0) / nextThreeDays.length;
 
         // 生成摘要
         let summary = '';
@@ -246,7 +307,7 @@ const WeatherService = (function() {
         }
 
         // 添加警報資訊
-        if (forecastData.hasAlerts && forecastData.warnings.length > 0) {
+        if (forecastData.hasAlerts && forecastData.warnings && forecastData.warnings.length > 0) {
             summary += ` 特別警報: ${forecastData.warnings[0].event}。`;
         }
 
@@ -301,9 +362,18 @@ const WeatherService = (function() {
             let weatherData;
 
             // 根據日期差異選擇適當的資料
-            if (daysDiff >= 0 && daysDiff <= 7) {
+            if (daysDiff >= 0 && daysDiff < forecastData.daily.length) {
                 // 從預報資料中提取指定日期的天氣資料
                 weatherData = forecastData.daily[daysDiff];
+
+                // 確保日期正確
+                if (weatherData.date !== date) {
+                    // 嘗試根據日期字串尋找天氣資料
+                    const matchingDay = forecastData.daily.find(day => day.date === date);
+                    if (matchingDay) {
+                        weatherData = matchingDay;
+                    }
+                }
             } else if (daysDiff > 7 && daysDiff <= 16) {
                 // 使用16天預報API（需要付費訂閱）
                 console.warn('請求的日期超出免費API的7天預報範圍，嘗試使用16天預報API');

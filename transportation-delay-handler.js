@@ -118,16 +118,52 @@ function handleTransportationDelay(event) {
 function testTransportationDelay() {
     if (typeof TransportationService === 'undefined') {
         console.error('交通服務模組未找到');
+        alert('交通服務模組未找到，請確保 transportation-service.js 已正確載入');
         return;
     }
+
+    console.log('測試交通延誤通知...');
 
     // 模擬交通路線
     const mockRouteId = 'ROUTE_捷運_台北車站_松山機場_0';
 
-    // 啟動監控
-    TransportationService.monitorTransportation(mockRouteId, (notification) => {
-        console.log('模擬交通延誤通知:', notification);
-    });
+    // 直接創建一個模擬的延誤通知
+    const mockStatus = {
+        routeId: mockRouteId,
+        delay: 15, // 15 分鐘延誤
+        crowdLevel: 4, // 擠擠的
+        status: '延誤',
+        timestamp: new Date().toISOString()
+    };
+
+    const mockNotification = {
+        routeId: mockRouteId,
+        status: mockStatus,
+        timestamp: new Date().toISOString(),
+        message: `捷運延誤通知: 台北車站到松山機場的班次延誤了 ${mockStatus.delay} 分鐘`
+    };
+
+    // 立即獲取替代路線建議
+    TransportationService.suggestAlternativeRoutes(mockRouteId, '延誤')
+        .then(alternatives => {
+            // 將替代路線添加到通知中
+            mockNotification.alternatives = alternatives;
+
+            // 觸發延誤通知事件
+            const event = new CustomEvent('transportation-delay', { detail: mockNotification });
+            window.dispatchEvent(event);
+
+            console.log('已發送模擬交通延誤通知，包含替代路線建議');
+        })
+        .catch(error => {
+            console.error('獲取替代路線時發生錯誤:', error);
+
+            // 即使沒有替代路線，也發送延誤通知
+            const event = new CustomEvent('transportation-delay', { detail: mockNotification });
+            window.dispatchEvent(event);
+
+            console.log('已發送模擬交通延誤通知，無替代路線建議');
+        });
 
     console.log('已啟動交通延誤測試');
 }

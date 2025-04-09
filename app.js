@@ -261,26 +261,7 @@ function initEventListeners() {
         }
     });
 
-    // AR 導航按鈕事件
-    const arNavButton = document.getElementById('start-ar-navigation');
-    console.log('AR 導航按鈕元素:', arNavButton);
-    if (arNavButton) {
-        arNavButton.addEventListener('click', function() {
-            console.log('AR 導航按鈕被點擊');
-            startARNavigation();
-        });
-        console.log('AR 導航按鈕事件已設置');
-    } else {
-        console.error('AR 導航按鈕元素不存在');
-    }
 
-    // 關閉 AR 導航按鈕事件
-    const closeArButton = document.getElementById('close-ar-navigation');
-    if (closeArButton) {
-        closeArButton.addEventListener('click', function() {
-            stopARNavigation();
-        });
-    }
 
     // 添加景点
     document.getElementById('add-destination').addEventListener('click', function() {
@@ -3795,104 +3776,7 @@ function openGoogleMapsSearch(location) {
     }, 1000);
 }
 
-// 啟動 AR 導航
-function startARNavigation() {
-    console.log('開始執行 startARNavigation 函數');
-    console.log('ARNavigation 對象存在性檢查:', typeof ARNavigation !== 'undefined' ? '存在' : '不存在');
 
-    // 檢查是否有設置出發點和目的地
-    console.log('出發點:', startingPoint);
-    console.log('目的地列表:', destinations);
-
-    if (!startingPoint) {
-        console.error('缺少出發點');
-        alert('請先設置出發點！');
-        return;
-    }
-
-    if (destinations.length === 0) {
-        console.error('缺少目的地');
-        alert('請至少添加一個目的地！');
-        return;
-    }
-
-    // 準備目的地列表
-    const destinationsList = [];
-
-    // 添加出發點
-    destinationsList.push({
-        name: startingPoint.name,
-        coordinates: {
-            latitude: startingPoint.coordinates[0],
-            longitude: startingPoint.coordinates[1]
-        },
-        type: 'starting-point'
-    });
-
-    // 添加所有目的地
-    destinations.forEach((dest, index) => {
-        destinationsList.push({
-            name: dest.name,
-            coordinates: {
-                latitude: dest.coordinates[0],
-                longitude: dest.coordinates[1]
-            },
-            type: 'destination',
-            index: index + 1
-        });
-    });
-
-    // 調用 AR 導航模組的啟動函數
-    console.log('準備調用 AR 導航模組');
-    console.log('目的地列表數據:', destinationsList);
-
-    try {
-        console.log('開始調用 ARNavigation.startARNavigation');
-        if (typeof ARNavigation === 'undefined' || typeof ARNavigation.startARNavigation !== 'function') {
-            throw new Error('ARNavigation 模組或 startARNavigation 方法不存在');
-        }
-
-        ARNavigation.startARNavigation(destinationsList)
-            .then(success => {
-                console.log('ARNavigation.startARNavigation 返回成功:', success);
-                if (success) {
-                    // 顯示 AR 容器
-                    const arContainer = document.getElementById('ar-container');
-                    console.log('AR 容器元素:', arContainer);
-                    if (arContainer) {
-                        arContainer.classList.add('active');
-                        console.log('AR 導航已啟動，容器已顯示');
-                    } else {
-                        console.error('AR 容器元素不存在');
-                        alert('AR 容器元素不存在，無法顯示 AR 導航界面');
-                    }
-                } else {
-                    console.warn('ARNavigation.startARNavigation 返回失敗');
-                }
-            })
-            .catch(error => {
-                console.error('AR 導航啟動失敗 (Promise 錯誤):', error);
-                alert(`AR 導航啟動失敗: ${error.message}`);
-            });
-    } catch (error) {
-        console.error('AR 導航啟動失敗 (try-catch 錯誤):', error);
-        alert(`AR 導航啟動失敗: ${error.message}`);
-    }
-}
-
-// 停止 AR 導航
-function stopARNavigation() {
-    try {
-        // 調用 AR 導航模組的停止函數
-        ARNavigation.stopARNavigation();
-
-        // 隱藏 AR 容器
-        document.getElementById('ar-container').classList.remove('active');
-        console.log('AR 導航已停止');
-    } catch (error) {
-        console.error('AR 導航停止失敗:', error);
-    }
-}
 
 // 從URL解析經緯度參數
 function parseLocationFromUrl() {
@@ -5659,21 +5543,38 @@ function showWeatherSettings() {
         testButton.disabled = true;
 
         // 嘗試獲取天氣資訊
-        fetch(`https://api.openweathermap.org/data/3.0/onecall?lat=${testLat}&lon=${testLon}&exclude=minutely,hourly&units=metric&lang=zh_tw&appid=${apiKey}`)
+        // 先嘗試使用 2.5 版本的 API，因為它更穩定且支援免費帳戶
+        fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${testLat}&lon=${testLon}&units=metric&lang=zh_tw&appid=${apiKey}`)
             .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API 請求失敗: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
                 // 移除臨時儲存的API金鑰
                 localStorage.removeItem('weather_api_key_temp');
 
-                if (response.ok) {
-                    alert('測試成功！API金鑰有效。');
-                } else {
-                    alert(`測試失敗！錯誤代碼: ${response.status}\n請確認您的API金鑰是否正確。`);
-                }
+                // 顯示成功訊息和天氣資訊
+                const cityName = data.name || '未知城市';
+                const temp = data.main ? Math.round(data.main.temp) : '未知';
+                const weatherDesc = data.weather && data.weather[0] ? data.weather[0].description : '未知';
+
+                alert(`測試成功！API金鑰有效。\n\n當前天氣資訊:\n城市: ${cityName}\n溫度: ${temp}°C\n天氣: ${weatherDesc}`);
+
+                // 儲存API金鑰
+                WeatherService.setApiKey(apiKey);
+
+                // 重新載入行程以更新天氣資訊
+                updateItinerary();
             })
             .catch(error => {
                 // 移除臨時儲存的API金鑰
                 localStorage.removeItem('weather_api_key_temp');
-                alert(`測試失敗！錯誤: ${error.message}`);
+
+                // 顯示錯誤訊息
+                console.error('天氣 API 測試失敗:', error);
+                alert(`測試失敗！\n\n錯誤訊息: ${error.message}\n\n可能的原因:\n1. API 金鑰不正確\n2. 網路連線問題\n3. API 服務暫時不可用\n\n請確認您的 API 金鑰是否正確，並嘗試重新測試。`);
             })
             .finally(() => {
                 // 恢復按鈕狀態
