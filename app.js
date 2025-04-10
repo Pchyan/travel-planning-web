@@ -1302,16 +1302,31 @@ function loadItinerary() {
 
 // 創建自定義事件，用於通知行程更新
 function notifyItineraryUpdated() {
+    console.log('行程規劃器: 準備發送行程更新事件');
+    console.log('行程規劃器: 當前行程狀態', {
+        startingPoint: startingPoint ? startingPoint.name : null,
+        destinations: destinations ? destinations.length : 0,
+        departureDate: departureDate,
+        departureTime: departureTime
+    });
+
+    // 確保全局變數已暴露
+    exposeGlobalVariables();
+
     // 創建自定義事件
     const event = new CustomEvent('itinerary-updated', {
         detail: {
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            startingPoint: startingPoint ? startingPoint.name : null,
+            destinationsCount: destinations ? destinations.length : 0
         }
     });
 
     // 分發事件
     window.dispatchEvent(event);
-    console.log('已發送行程更新事件');
+    console.log('行程規劃器: 已發送行程更新事件');
+
+    return true;
 }
 
 // 更新行程显示
@@ -5743,7 +5758,16 @@ function startNewItinerary() {
 }
 
 // 將局部變數暴露為全局變數，以便其他模組可以訪問
-(function exposeGlobalVariables() {
+function exposeGlobalVariables() {
+    console.log('行程規劃器: 開始暴露全局變數');
+    console.log('行程規劃器: 局部變數狀態', {
+        startingPoint: startingPoint,
+        destinations: destinations ? destinations.length : 0,
+        departureDate: departureDate,
+        departureTime: departureTime,
+        maxDailyHours: maxDailyHours
+    });
+
     // 將局部變數設置為 window 對象的屬性
     window.startingPoint = startingPoint;
     window.destinations = destinations;
@@ -5754,15 +5778,41 @@ function startNewItinerary() {
     window.dailyEndPoints = dailyEndPoints;
     window.locationCache = locationCache;
 
-    // 監聽行程更新事件，確保全局變數保持同步
-    window.addEventListener('itinerary-updated', function() {
-        window.startingPoint = startingPoint;
-        window.destinations = destinations;
-        window.departureDate = departureDate;
-        window.departureTime = departureTime;
-        window.maxDailyHours = maxDailyHours;
-        window.dailySettings = dailySettings;
-        window.dailyEndPoints = dailyEndPoints;
-        window.locationCache = locationCache;
+    // 暴露關鍵函數
+    window.updateItinerary = updateItinerary;
+    window.updateMap = updateMap;
+    window.notifyItineraryUpdated = notifyItineraryUpdated;
+
+    console.log('行程規劃器: 全局變數已暴露', {
+        startingPoint: window.startingPoint,
+        destinations: window.destinations ? window.destinations.length : 0,
+        updateItinerary: typeof window.updateItinerary === 'function',
+        updateMap: typeof window.updateMap === 'function',
+        notifyItineraryUpdated: typeof window.notifyItineraryUpdated === 'function'
     });
+
+    return true;
+}
+
+// 監聽行程更新事件，確保全局變數保持同步
+window.addEventListener('itinerary-updated', function() {
+    console.log('行程規劃器: 接收到行程更新事件，更新全局變數');
+    window.startingPoint = startingPoint;
+    window.destinations = destinations;
+    window.departureDate = departureDate;
+    window.departureTime = departureTime;
+    window.maxDailyHours = maxDailyHours;
+    window.dailySettings = dailySettings;
+    window.dailyEndPoints = dailyEndPoints;
+    window.locationCache = locationCache;
+
+    console.log('行程規劃器: 全局變數已更新', {
+        startingPoint: window.startingPoint,
+        destinations: window.destinations ? window.destinations.length : 0
+    });
+});
+
+// 初始化時立即暴露全局變數
+(function() {
+    exposeGlobalVariables();
 })();
