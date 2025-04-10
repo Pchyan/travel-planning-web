@@ -490,6 +490,9 @@ async function setStartingPoint(location) {
         // 更新行程
         updateItinerary();
 
+        // 通知行程已更新
+        notifyItineraryUpdated();
+
         // 启用添加景点功能
         document.getElementById('new-destination').disabled = false;
         document.getElementById('add-destination').disabled = false;
@@ -562,6 +565,9 @@ async function addDestination(location) {
         // 更新行程
         updateItinerary();
 
+        // 通知行程已更新
+        notifyItineraryUpdated();
+
         console.log(`新增景點: ${location}，停留時間: ${stayDuration} 小時`);
     } catch (error) {
         console.error('Geocoding error:', error);
@@ -602,6 +608,9 @@ function removeDestination(index) {
 
     // 更新行程
     updateItinerary();
+
+    // 通知行程已更新
+    notifyItineraryUpdated();
 
     console.log(`已刪除景點 #${index + 1}: ${destinationName}`);
 
@@ -1241,6 +1250,9 @@ function loadItinerary() {
                     updateItinerary();
                     updateMap();
 
+                    // 通知行程已更新
+                    notifyItineraryUpdated();
+
                     // 讀取位置緩存
                     if (selectedItinerary.locationCache) {
                         locationCache = selectedItinerary.locationCache;
@@ -1286,6 +1298,20 @@ function loadItinerary() {
         console.error('讀取行程過程中發生錯誤:', error);
         alert(`讀取行程失敗: ${error.message}\n\n請嘗試清除瀏覽器緩存或重新創建行程。`);
     }
+}
+
+// 創建自定義事件，用於通知行程更新
+function notifyItineraryUpdated() {
+    // 創建自定義事件
+    const event = new CustomEvent('itinerary-updated', {
+        detail: {
+            timestamp: new Date().toISOString()
+        }
+    });
+
+    // 分發事件
+    window.dispatchEvent(event);
+    console.log('已發送行程更新事件');
 }
 
 // 更新行程显示
@@ -1791,6 +1817,9 @@ function handleCoordinatesInput(lat, lng, locationName) {
         updateMap();
         updateItinerary();
 
+        // 通知行程已更新
+        notifyItineraryUpdated();
+
         console.log(`新增景點: ${locationName}，停留時間: ${stayDuration} 小時`);
     }
 
@@ -1810,6 +1839,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 初始化事件监听器
     initEventListeners();
+
+    // 即時同步按鈕事件
+    const realtimeShareButton = document.getElementById('realtime-share');
+    if (realtimeShareButton && typeof RealtimeSharing !== 'undefined') {
+        realtimeShareButton.addEventListener('click', function() {
+            RealtimeSharing.createRealtimeShare();
+        });
+    }
 
     // 禁用添加景点功能，直到设置出发点
     document.getElementById('new-destination').disabled = true;
@@ -2956,6 +2993,9 @@ function loadSelectedItinerary(name) {
         // 更新界面和地圖
         updateItinerary();
         updateMap();
+
+        // 通知行程已更新
+        notifyItineraryUpdated();
 
         // 讀取位置緩存
         if (selectedItinerary.locationCache) {

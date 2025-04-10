@@ -149,6 +149,10 @@
                     <button id="open-travel-record" title="查看和管理您的旅行記錄"><i class="fas fa-book"></i> 旅行記錄</button>
                     <!-- 添加預算追蹤按鈕 -->
                     <button id="open-budget-tracker" title="設定和追蹤您的旅行預算"><i class="fas fa-money-bill-wave"></i> 預算追蹤</button>
+                    <!-- 添加行程分享按鈕 -->
+                    <button id="share-itinerary" title="分享行程給朋友"><i class="fas fa-share-alt"></i> 分享行程</button>
+                    <button id="collaborate-itinerary" title="查看協作者和評論"><i class="fas fa-users"></i> 協作與評論</button>
+                    <button id="realtime-share" title="即時同步分享行程"><i class="fas fa-sync-alt"></i> 即時同步</button>
                     <!-- 緊急聯絡資訊按鈕已移除 -->
                 </div>
 
@@ -566,6 +570,11 @@
     <!-- Leaflet 地圖庫 -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
+
     <!-- 專案腳本 -->
     <script src="transportationSystems.js"></script>
     <!-- 添加天氣服務模組腳本 -->
@@ -591,6 +600,10 @@
     <script src="smart-recommendation-ui.js"></script>
     <!-- 添加預算追蹤模組腳本 -->
     <script src="budget-tracker.js"></script>
+    <!-- 添加行程分享模組腳本 -->
+    <script src="itinerary-sharing.js"></script>
+    <!-- 添加即時同步行程分享模組腳本 -->
+    <script src="realtime-sharing.js"></script>
     <!-- 交通卡資訊模組已移除 -->
     <!-- 緊急聯絡資訊模組已移除 -->
     <script>
