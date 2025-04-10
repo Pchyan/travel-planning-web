@@ -1840,11 +1840,41 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化事件监听器
     initEventListeners();
 
+    // 初始化全局變數暴露
+    exposeGlobalVariables();
+
     // 即時同步按鈕事件
     const realtimeShareButton = document.getElementById('realtime-share');
-    if (realtimeShareButton && typeof RealtimeSharing !== 'undefined') {
+    if (realtimeShareButton) {
+        // 確保按鈕不被禁用
+        realtimeShareButton.disabled = false;
+        realtimeShareButton.title = '即時同步分享行程';
+
         realtimeShareButton.addEventListener('click', function() {
-            RealtimeSharing.createRealtimeShare();
+            if (typeof RealtimeSharing === 'undefined') {
+                console.error('即時同步模組未載入');
+                alert('即時同步功能無法使用，請重新載入頁面後再試。');
+                return;
+            }
+
+            try {
+                // 檢查是否有行程可分享
+                if (!startingPoint) {
+                    alert('請先設置出發點再進行即時同步分享！');
+                    return;
+                }
+
+                if (!destinations || destinations.length === 0) {
+                    alert('請先添加至少一個景點再進行即時同步分享！');
+                    return;
+                }
+
+                // 創建即時分享
+                RealtimeSharing.createRealtimeShare();
+            } catch (error) {
+                console.error('創建即時分享時發生錯誤:', error);
+                alert('創建即時分享時發生錯誤\n\n' + error.message);
+            }
         });
     }
 
@@ -5711,3 +5741,28 @@ function startNewItinerary() {
         alert('目前沒有行程資料，可以直接開始規劃！');
     }
 }
+
+// 將局部變數暴露為全局變數，以便其他模組可以訪問
+(function exposeGlobalVariables() {
+    // 將局部變數設置為 window 對象的屬性
+    window.startingPoint = startingPoint;
+    window.destinations = destinations;
+    window.departureDate = departureDate;
+    window.departureTime = departureTime;
+    window.maxDailyHours = maxDailyHours;
+    window.dailySettings = dailySettings;
+    window.dailyEndPoints = dailyEndPoints;
+    window.locationCache = locationCache;
+
+    // 監聽行程更新事件，確保全局變數保持同步
+    window.addEventListener('itinerary-updated', function() {
+        window.startingPoint = startingPoint;
+        window.destinations = destinations;
+        window.departureDate = departureDate;
+        window.departureTime = departureTime;
+        window.maxDailyHours = maxDailyHours;
+        window.dailySettings = dailySettings;
+        window.dailyEndPoints = dailyEndPoints;
+        window.locationCache = locationCache;
+    });
+})();

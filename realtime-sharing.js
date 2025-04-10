@@ -19,20 +19,66 @@ const RealtimeSharing = (function() {
 
     // 初始化模組
     function init() {
-        if (isInitialized) return;
+        if (isInitialized) {
+            console.log('即時同步行程分享模組已經初始化');
+            return Promise.resolve(true);
+        }
 
         console.log('即時同步行程分享模組初始化中...');
 
         // 載入使用者資料
         loadUserData();
 
-        // 檢查 Firebase 是否已初始化
-        if (typeof FirebaseService === 'undefined' || !FirebaseService.isReady()) {
-            console.error('Firebase 服務未初始化，即時同步功能將無法使用');
-            alert('即時同步功能初始化失敗，將使用本地儲存模式。');
-            return;
-        }
+        return new Promise((resolve, reject) => {
+            // 檢查 Firebase 服務是否存在
+            if (typeof FirebaseService === 'undefined') {
+                const errorMsg = 'Firebase 服務模組未載入，即時同步功能將無法使用';
+                console.error(errorMsg);
+                alert(errorMsg);
+                return reject(new Error(errorMsg));
+            }
 
+            // 如果 Firebase 已就緒，直接初始化
+            if (FirebaseService.isReady()) {
+                console.log('Firebase 服務已就緒，繼續初始化即時同步模組');
+                completeInitialization();
+                return resolve(true);
+            }
+
+            // 否則，等待 Firebase 就緒事件
+            console.log('等待 Firebase 服務初始化完成...');
+
+            // 監聽 Firebase 就緒事件
+            window.addEventListener('firebase-ready', function firebaseReadyHandler() {
+                console.log('Firebase 服務已就緒，完成即時同步模組初始化');
+                window.removeEventListener('firebase-ready', firebaseReadyHandler);
+                completeInitialization();
+                resolve(true);
+            });
+
+            // 監聽 Firebase 錯誤事件
+            window.addEventListener('firebase-error', function firebaseErrorHandler(event) {
+                const errorMsg = '由於 Firebase 初始化失敗，即時同步功能將無法使用';
+                console.error(errorMsg, event.detail);
+                window.removeEventListener('firebase-error', firebaseErrorHandler);
+                reject(new Error(errorMsg));
+            });
+
+            // 設置逾時，防止無限期等待
+            setTimeout(() => {
+                if (!isInitialized) {
+                    console.warn('等待 Firebase 初始化逾時，嘗試強制初始化即時同步模組...');
+
+                    // 即使 Firebase 未就緒，也強制初始化即時同步模組
+                    completeInitialization();
+                    resolve(true);
+                }
+            }, 20000); // 增加到 20 秒逾時
+        });
+    }
+
+    // 完成初始化
+    function completeInitialization() {
         // 檢查 URL 是否包含分享 ID
         checkShareIdInUrl();
 
@@ -88,9 +134,86 @@ const RealtimeSharing = (function() {
 
     // 創建即時分享行程
     function createRealtimeShare() {
+        // 檢查模組是否已初始化
+        if (!isInitialized) {
+            console.error('即時同步模組尚未初始化');
+            alert('即時同步功能尚未就緒，請稍後再試。');
+            return;
+        }
+
+        // 檢查 Firebase 是否已初始化
+        if (typeof FirebaseService === 'undefined') {
+            console.error('Firebase 服務模組未載入，無法創建即時分享');
+            alert('Firebase 服務模組未載入，無法創建即時分享。\n\n請重新載入頁面後再試。');
+            return;
+        }
+
+        // 即使 Firebase 未就緒，也嘗試強制初始化
+        if (!FirebaseService.isReady()) {
+            console.warn('Firebase 服務未就緒，嘗試強制初始化...');
+
+            try {
+                // 嘗試再次初始化 Firebase
+                FirebaseService.init()
+                    .then(() => {
+                        console.log('Firebase 服務強制初始化成功，繼續創建即時分享');
+                        // 進行即時分享創建
+                        setTimeout(() => createRealtimeShare(), 500);
+                    })
+                    .catch(error => {
+                        console.error('Firebase 服務強制初始化失敗:', error);
+                        alert('Firebase 服務無法初始化，即時分享功能無法使用。\n\n請檢查網路連接後重新載入頁面。');
+                    });
+                return;
+            } catch (error) {
+                console.error('Firebase 服務強制初始化失敗:', error);
+                alert('Firebase 服務無法初始化，即時分享功能無法使用。\n\n請檢查網路連接後重新載入頁面。');
+                return;
+            }
+        }
+
         // 檢查是否有行程可分享
-        if (!window.startingPoint || window.destinations.length === 0) {
-            alert('請先建立行程再進行即時分享！');
+        console.log('即時分享: 檢查行程資料...');
+        console.log('window.startingPoint:', window.startingPoint);
+        console.log('window.destinations:', window.destinations);
+        console.log('模組內 startingPoint:', startingPoint);
+        console.log('模組內 destinations:', destinations);
+
+        // 嘗試使用 window 全局變數，如果不存在則使用模組內變數
+        const effectiveStartingPoint = window.startingPoint || startingPoint;
+        const effectiveDestinations = window.destinations || destinations;
+
+        console.log('最終使用的資料:', {
+            startingPoint: effectiveStartingPoint,
+            destinations: effectiveDestinations
+        });
+
+        const status = {
+            startingPoint: effectiveStartingPoint,
+            destinationsLength: effectiveDestinations ? effectiveDestinations.length : 0,
+            destinations: effectiveDestinations
+        };
+
+        console.log('即時分享行程狀態檢查:', status);
+
+        // 檢查 startingPoint 是否存在
+        if (!effectiveStartingPoint) {
+            console.error('出發點未設置');
+            alert('請先設置出發點再進行即時分享！');
+            return;
+        }
+
+        // 檢查 destinations 是否存在且不為空
+        if (!effectiveDestinations) {
+            console.error('destinations 變數不存在');
+            alert('行程資料不完整，請重新整理行程再進行即時分享！');
+            return;
+        }
+
+        // 檢查是否有景點
+        if (effectiveDestinations.length === 0) {
+            console.error('沒有景點');
+            alert('請先添加至少一個景點再進行即時分享！');
             return;
         }
 
@@ -114,15 +237,17 @@ const RealtimeSharing = (function() {
         const shareId = generateShareId();
 
         // 獲取當前行程資料
+        console.log('即時分享: 準備行程資料...');
+
         const itineraryData = {
-            startingPoint: window.startingPoint,
-            destinations: window.destinations,
-            departureDate: window.departureDate,
-            departureTime: window.departureTime,
-            maxDailyHours: window.maxDailyHours,
-            dailySettings: window.dailySettings,
-            dailyEndPoints: window.dailyEndPoints,
-            locationCache: window.locationCache,
+            startingPoint: effectiveStartingPoint,
+            destinations: effectiveDestinations,
+            departureDate: window.departureDate || departureDate,
+            departureTime: window.departureTime || departureTime,
+            maxDailyHours: window.maxDailyHours || maxDailyHours,
+            dailySettings: window.dailySettings || dailySettings,
+            dailyEndPoints: window.dailyEndPoints || dailyEndPoints,
+            locationCache: window.locationCache || locationCache,
             name: prompt('請為即時分享的行程命名：', '我的行程') || '未命名行程',
             createdAt: new Date().toISOString()
         };
@@ -162,8 +287,11 @@ const RealtimeSharing = (function() {
 
     // 顯示分享連結對話框
     function showShareLinkDialog(shareId) {
+        console.log('即時分享: 顯示分享連結對話框，分享 ID:', shareId);
+
         // 生成分享連結
         const shareUrl = `${window.location.origin}${window.location.pathname}?rtshare=${shareId}`;
+        console.log('即時分享 URL:', shareUrl);
 
         // 創建對話框
         const dialog = document.createElement('div');
@@ -218,26 +346,36 @@ const RealtimeSharing = (function() {
         document.body.appendChild(dialog);
 
         // 生成QR碼
-        if (window.QRCode) {
-            new QRCode(document.getElementById("realtime-qrcode"), {
-                text: shareUrl,
-                width: 128,
-                height: 128
-            });
-        } else {
-            document.getElementById("realtime-qrcode").innerHTML = '<p>QR碼生成器未載入</p>';
-
-            // 動態載入QR碼生成器
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js';
-            script.onload = function() {
-                new QRCode(document.getElementById("realtime-qrcode"), {
-                    text: shareUrl,
-                    width: 128,
-                    height: 128
+        if (typeof QRCodeHelper !== 'undefined') {
+            // 使用我們的輔助工具生成 QR 碼
+            QRCodeHelper.generateQRCode("realtime-qrcode", shareUrl)
+                .catch(error => {
+                    console.error('即時分享: 使用 QRCodeHelper 生成 QR 碼失敗:', error);
+                    // 如果主要方法失敗，使用備用方法
+                    QRCodeHelper.generateQRCodeFallback("realtime-qrcode", shareUrl, 128);
                 });
-            };
-            document.head.appendChild(script);
+        } else {
+            // 如果輔助工具不可用，嘗試直接使用 QRCode
+            try {
+                if (window.QRCode) {
+                    new QRCode(document.getElementById("realtime-qrcode"), {
+                        text: shareUrl,
+                        width: 128,
+                        height: 128
+                    });
+                    console.log('即時分享 QR碼生成成功');
+                } else {
+                    // 如果 QRCode 不可用，使用 Google Charts API 生成 QR 碼
+                    const googleChartsUrl = `https://chart.googleapis.com/chart?cht=qr&chs=128x128&chl=${encodeURIComponent(shareUrl)}&chld=H|0`;
+                    document.getElementById("realtime-qrcode").innerHTML = `<img src="${googleChartsUrl}" alt="QR Code" style="width:128px; height:128px;">`;
+                    console.log('即時分享: 使用 Google Charts API 生成 QR 碼成功');
+                }
+            } catch (err) {
+                console.error('即時分享 QR碼生成過程中發生錯誤:', err);
+                // 最後的備用方案：使用 Google Charts API
+                const googleChartsUrl = `https://chart.googleapis.com/chart?cht=qr&chs=128x128&chl=${encodeURIComponent(shareUrl)}&chld=H|0`;
+                document.getElementById("realtime-qrcode").innerHTML = `<img src="${googleChartsUrl}" alt="QR Code" style="width:128px; height:128px;">`;
+            }
         }
 
         // 複製連結按鈕
@@ -467,12 +605,16 @@ const RealtimeSharing = (function() {
 
     // 連接到分享的行程
     function connectToSharedItinerary(shareId) {
+        console.log('即時分享: 嘗試連接到分享行程, ID:', shareId);
+
         if (!FirebaseService.isReady()) {
+            console.error('Firebase 服務未初始化，無法連接到即時分享行程');
             alert('Firebase 服務未初始化，無法連接到即時分享行程。');
             return;
         }
 
         console.log('正在連接到即時分享行程:', shareId);
+        console.log('Firebase 服務狀態:', FirebaseService.isReady() ? '已就緒' : '未就緒');
 
         // 檢查使用者是否已設置名稱
         if (!currentUser) {
@@ -735,5 +877,26 @@ const RealtimeSharing = (function() {
 
 // 當文檔載入完成後初始化模組
 document.addEventListener('DOMContentLoaded', function() {
-    RealtimeSharing.init();
+    console.log('開始初始化即時同步行程分享模組...');
+    RealtimeSharing.init()
+        .then(() => {
+            console.log('即時同步行程分享模組初始化成功');
+
+            // 啟用即時同步按鈕
+            const realtimeShareButton = document.getElementById('realtime-share');
+            if (realtimeShareButton) {
+                realtimeShareButton.disabled = false;
+                realtimeShareButton.title = '即時同步分享行程';
+            }
+        })
+        .catch(error => {
+            console.error('即時同步行程分享模組初始化失敗:', error);
+
+            // 禁用即時同步按鈕並更新提示
+            const realtimeShareButton = document.getElementById('realtime-share');
+            if (realtimeShareButton) {
+                realtimeShareButton.disabled = true;
+                realtimeShareButton.title = '即時同步功能無法使用，請檢查網路連接';
+            }
+        });
 });

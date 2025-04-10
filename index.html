@@ -571,9 +571,43 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 
     <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <!-- 測試 Firebase 是否載入成功 -->
+    <script>
+        window.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                if (typeof firebase === 'undefined') {
+                    console.error('Firebase SDK 未成功載入，嘗試從備用來源載入');
+                    // 從備用來源載入 Firebase SDK
+                    var script1 = document.createElement('script');
+                    script1.src = 'https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-app-compat.js';
+                    document.head.appendChild(script1);
+
+                    var script2 = document.createElement('script');
+                    script2.src = 'https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-database-compat.js';
+                    document.head.appendChild(script2);
+
+                    // 在備用 SDK 載入後再次載入配置
+                    script2.onload = function() {
+                        var configScript = document.createElement('script');
+                        configScript.src = 'firebase-config.js';
+                        document.head.appendChild(configScript);
+                    };
+                } else {
+                    console.log('Firebase SDK 已成功載入');
+                }
+            }, 1000); // 等待 1 秒確保頁面已完全載入
+        });
+    </script>
+
     <script src="firebase-config.js"></script>
+
+    <!-- QR 碼生成器 -->
+    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    <!-- QR 碼生成器輔助工具 -->
+    <script src="qrcode-helper.js"></script>
 
     <!-- 專案腳本 -->
     <script src="transportationSystems.js"></script>
@@ -604,6 +638,8 @@
     <script src="itinerary-sharing.js"></script>
     <!-- 添加即時同步行程分享模組腳本 -->
     <script src="realtime-sharing.js"></script>
+    <!-- 添加 Firebase 測試工具 -->
+    <script src="firebase-test.js"></script>
     <!-- 交通卡資訊模組已移除 -->
     <!-- 緊急聯絡資訊模組已移除 -->
     <script>
@@ -637,6 +673,25 @@
         }
 
         // 交通卡資訊按鈕已移除
+
+        // 顯示行程狀態按鈕
+        const debugItineraryButton = document.getElementById('debug-itinerary');
+        if (debugItineraryButton) {
+            debugItineraryButton.addEventListener('click', function() {
+                // 顯示當前行程狀態
+                const status = {
+                    startingPoint: window.startingPoint,
+                    destinationsLength: window.destinations ? window.destinations.length : 0,
+                    destinations: window.destinations,
+                    departureDate: window.departureDate,
+                    departureTime: window.departureTime,
+                    maxDailyHours: window.maxDailyHours
+                };
+
+                console.log('當前行程狀態:', status);
+                alert(`當前行程狀態:\n\n出發點: ${status.startingPoint ? status.startingPoint.name : '未設置'}\n景點數量: ${status.destinationsLength}\n出發日期: ${status.departureDate || '未設置'}\n出發時間: ${status.departureTime || '未設置'}\n每日行程時間: ${status.maxDailyHours || '未設置'} 小時`);
+            });
+        }
 
         // 緊急聯絡資訊模組已移除
     </script>
