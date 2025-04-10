@@ -29,6 +29,9 @@ const RealtimeSharing = (function() {
         // 載入使用者資料
         loadUserData();
 
+        // 檢查本地儲存中是否有行程數據
+        checkLocalStorageForItineraries();
+
         return new Promise((resolve, reject) => {
             // 檢查 Firebase 服務是否存在
             if (typeof FirebaseService === 'undefined') {
@@ -112,6 +115,29 @@ const RealtimeSharing = (function() {
         }
     }
 
+    // 檢查本地儲存中是否有行程數據
+    function checkLocalStorageForItineraries() {
+        console.log('即時分享: 檢查本地儲存中是否有行程數據');
+
+        try {
+            // 檢查已保存的行程
+            const savedItinerariesStr = localStorage.getItem('saved_itineraries');
+            if (!savedItinerariesStr) {
+                console.log('即時分享: 本地儲存中沒有已保存的行程');
+                localStorage.setItem('saved_itineraries', '{}');
+                return false;
+            }
+
+            const savedItineraries = JSON.parse(savedItinerariesStr);
+            const itineraryCount = Object.keys(savedItineraries).length;
+            console.log(`即時分享: 本地儲存中有 ${itineraryCount} 個已保存的行程`);
+            return itineraryCount > 0;
+        } catch (error) {
+            console.error('即時分享: 檢查本地儲存中的行程時發生錯誤', error);
+            return false;
+        }
+    }
+
     // 檢查 URL 是否包含分享 ID
     function checkShareIdInUrl() {
         const urlParams = new URLSearchParams(window.location.search);
@@ -119,6 +145,10 @@ const RealtimeSharing = (function() {
 
         if (shareId) {
             console.log('從 URL 中檢測到即時分享 ID:', shareId);
+
+            // 確保本地儲存中有行程數據
+            checkLocalStorageForItineraries();
+
             // 連接到分享的行程
             connectToSharedItinerary(shareId);
 
@@ -684,6 +714,56 @@ const RealtimeSharing = (function() {
                 return;
             }
 
+            // 將分享的行程資料保存到本地儲存，以便協作者可以使用
+            try {
+                // 將分享的行程保存為自定義名稱
+                const itineraryName = itineraryData.name || '分享的行程';
+
+                // 從本地儲存獲取已保存的行程
+                let savedItineraries = {};
+                try {
+                    const savedItinerariesStr = localStorage.getItem('saved_itineraries');
+                    if (savedItinerariesStr) {
+                        savedItineraries = JSON.parse(savedItinerariesStr);
+                    }
+                } catch (e) {
+                    console.error('即時分享: 讀取已保存的行程時發生錯誤', e);
+                }
+
+                // 將分享的行程保存到本地儲存
+                savedItineraries[itineraryName] = {
+                    startingPoint: itineraryData.startingPoint,
+                    destinations: itineraryData.destinations,
+                    savedAt: new Date().toISOString(),
+                    departureDate: itineraryData.departureDate,
+                    departureTime: itineraryData.departureTime,
+                    maxDailyHours: itineraryData.maxDailyHours,
+                    dailySettings: itineraryData.dailySettings || [],
+                    dailyEndPoints: itineraryData.dailyEndPoints || [],
+                    locationCache: itineraryData.locationCache || {},
+                    isShared: true,
+                    shareId: currentShareId
+                };
+
+                // 更新本地儲存
+                localStorage.setItem('saved_itineraries', JSON.stringify(savedItineraries));
+                console.log('即時分享: 分享的行程已保存到本地儲存', itineraryName);
+
+                // 同時更新當前行程
+                localStorage.setItem('travel_planner_data', JSON.stringify({
+                    startingPoint: itineraryData.startingPoint,
+                    destinations: itineraryData.destinations,
+                    departureDate: itineraryData.departureDate,
+                    departureTime: itineraryData.departureTime,
+                    maxDailyHours: itineraryData.maxDailyHours,
+                    dailySettings: itineraryData.dailySettings || [],
+                    dailyEndPoints: itineraryData.dailyEndPoints || [],
+                    locationCache: itineraryData.locationCache || {}
+                }));
+            } catch (storageError) {
+                console.error('即時分享: 將分享的行程保存到本地儲存時發生錯誤', storageError);
+            }
+
             console.log('即時分享: 行程資料已載入到全局變數', {
                 startingPoint: window.startingPoint,
                 destinations: window.destinations
@@ -813,6 +893,22 @@ const RealtimeSharing = (function() {
         // 首先檢查分享的行程是否存在
         console.log('即時分享: 檢查分享行程是否存在, ID:', shareId);
 
+        // 清除本地儲存中的「沒有找到已保存的行程數據」提示
+        console.log('即時分享: 檢查本地儲存中的行程數據');
+        try {
+            // 從本地儲存獲取已保存的行程
+            const savedItinerariesStr = localStorage.getItem('saved_itineraries');
+            console.log('即時分享: 本地儲存中的行程數據:', savedItinerariesStr);
+
+            // 如果沒有已保存的行程，則創建一個空的對象
+            if (!savedItinerariesStr) {
+                console.log('即時分享: 本地儲存中沒有行程數據，創建空對象');
+                localStorage.setItem('saved_itineraries', '{}');
+            }
+        } catch (e) {
+            console.error('即時分享: 讀取本地儲存中的行程數據時發生錯誤', e);
+        }
+
         FirebaseService.getRef(`shared_itineraries/${shareId}`).once('value', snapshot => {
             const sharedItinerary = snapshot.val();
             console.log('即時分享: 從 Firebase 獲取的行程資料:', sharedItinerary);
@@ -827,6 +923,11 @@ const RealtimeSharing = (function() {
                 console.error('即時分享: 分享行程資料不完整, ID:', shareId);
                 alert('分享行程資料不完整，無法載入。');
                 return;
+            }
+
+            // 為分享的行程添加名稱，以便在本地儲存中識別
+            if (!sharedItinerary.itineraryData.name) {
+                sharedItinerary.itineraryData.name = `分享的行程 (${new Date().toLocaleDateString()})`;
             }
 
             // 設置當前分享 ID
@@ -936,7 +1037,58 @@ const RealtimeSharing = (function() {
             console.log('接收到行程資料變更');
 
             // 更新行程資料
+            console.log('即時分享: 接收到行程資料變更，準備更新本地行程');
+
+            // 確保分享的行程有名稱
+            if (!itineraryData.name) {
+                itineraryData.name = `分享的行程 (${new Date().toLocaleDateString()})`;
+            }
+
+            // 更新行程資料
             loadSharedItineraryData(itineraryData);
+
+            // 更新本地儲存中的行程資料
+            try {
+                // 從本地儲存獲取已保存的行程
+                let savedItineraries = {};
+                const savedItinerariesStr = localStorage.getItem('saved_itineraries');
+                if (savedItinerariesStr) {
+                    savedItineraries = JSON.parse(savedItinerariesStr);
+                }
+
+                // 更新分享的行程
+                savedItineraries[itineraryData.name] = {
+                    startingPoint: itineraryData.startingPoint,
+                    destinations: itineraryData.destinations,
+                    savedAt: new Date().toISOString(),
+                    departureDate: itineraryData.departureDate,
+                    departureTime: itineraryData.departureTime,
+                    maxDailyHours: itineraryData.maxDailyHours,
+                    dailySettings: itineraryData.dailySettings || [],
+                    dailyEndPoints: itineraryData.dailyEndPoints || [],
+                    locationCache: itineraryData.locationCache || {},
+                    isShared: true,
+                    shareId: currentShareId
+                };
+
+                // 更新本地儲存
+                localStorage.setItem('saved_itineraries', JSON.stringify(savedItineraries));
+                console.log('即時分享: 已更新本地儲存中的行程資料');
+
+                // 同時更新當前行程
+                localStorage.setItem('travel_planner_data', JSON.stringify({
+                    startingPoint: itineraryData.startingPoint,
+                    destinations: itineraryData.destinations,
+                    departureDate: itineraryData.departureDate,
+                    departureTime: itineraryData.departureTime,
+                    maxDailyHours: itineraryData.maxDailyHours,
+                    dailySettings: itineraryData.dailySettings || [],
+                    dailyEndPoints: itineraryData.dailyEndPoints || [],
+                    locationCache: itineraryData.locationCache || {}
+                }));
+            } catch (error) {
+                console.error('即時分享: 更新本地儲存中的行程資料時發生錯誤', error);
+            }
         });
 
         // 監聽活躍用戶變更
