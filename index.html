@@ -17,14 +17,12 @@
     <link rel="stylesheet" href="travel-record.css" />
     <!-- 添加天氣服務模組樣式 -->
     <link rel="stylesheet" href="weather-styles.css" />
-    <!-- 添加交通卡資訊模組樣式 -->
-    <link rel="stylesheet" href="transit-card.css" />
+    <!-- 交通卡資訊模組已移除 -->
     <!-- 添加智慧行程建議模組樣式 -->
     <link rel="stylesheet" href="smart-recommendation.css" />
     <!-- 添加預算追蹤模組樣式 -->
     <link rel="stylesheet" href="budget-tracker.css" />
-    <!-- 添加緊急聯絡資訊模組樣式 -->
-    <link rel="stylesheet" href="emergency-contact.css" />
+    <!-- 緊急聯絡資訊模組已移除 -->
 
 
     <style>
@@ -33,36 +31,54 @@
             display: none !important;
         }
 
-        /* 測試按鈕區域樣式 */
+        /* 測試按鈕區域樣式 - 頁面底部 */
         .test-buttons {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
             display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 1000;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin: 20px auto;
+            max-width: 800px;
+            padding-top: 20px;
+            border-top: 1px dashed #ddd;
         }
 
         .test-button {
-            padding: 10px 15px;
-            background-color: #4a89dc;
+            padding: 12px 20px;
+            background-color: #6c757d;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 0.9rem;
-            display: flex;
+            font-size: 0.95rem;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
             transition: all 0.2s;
+            margin: 5px;
         }
 
         .test-button:hover {
-            background-color: #3a79cc;
+            background-color: #5a6268;
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        #test-transportation-delay {
+            background-color: #f39c12;
+        }
+
+        #test-transportation-delay:hover {
+            background-color: #d68910;
+        }
+
+        #test-transit-card {
+            background-color: #6f42c1;
+        }
+
+        #test-transit-card:hover {
+            background-color: #5e35b1;
         }
 
         .test-button i {
@@ -133,8 +149,7 @@
                     <button id="open-travel-record" title="查看和管理您的旅行記錄"><i class="fas fa-book"></i> 旅行記錄</button>
                     <!-- 添加預算追蹤按鈕 -->
                     <button id="open-budget-tracker" title="設定和追蹤您的旅行預算"><i class="fas fa-money-bill-wave"></i> 預算追蹤</button>
-                    <!-- 添加緊急聯絡資訊按鈕 -->
-                    <button id="open-emergency-contact" title="查看旅遊目的地的緊急聯絡資訊"><i class="fas fa-exclamation-circle"></i> 緊急聯絡</button>
+                    <!-- 緊急聯絡資訊按鈕已移除 -->
                 </div>
 
                 <div class="add-destination">
@@ -214,10 +229,6 @@
         <footer>
             <p>旅遊規劃助手 &copy; <span id="current-year">2023</span></p>
             <p class="footer-note">使用 Font Awesome 圖示與 Leaflet 地圖技術</p>
-            <div class="test-buttons">
-                <button id="test-transit-card" class="test-button">測試交通卡資訊</button>
-                <button id="test-transportation-delay" class="test-button">測試交通延誤</button>
-            </div>
         </footer>
     </div>
 
@@ -550,12 +561,7 @@
         </div>
     </div>
 
-    <!-- 測試按鈕區域 -->
-    <div class="test-buttons">
-        <button id="test-transportation-delay" class="test-button"><i class="fas fa-bus"></i> 測試交通延認</button>
-        <button id="test-transit-card" class="test-button"><i class="fas fa-credit-card"></i> 測試交通卡</button>
-        <button id="test-emergency-contact" class="test-button emergency-contact-button"><i class="fas fa-exclamation-circle"></i> 測試緊急聯絡</button>
-    </div>
+    <!-- 測試按鈕已移動到頁面底部 -->
 
     <!-- Leaflet 地圖庫 -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
@@ -575,8 +581,7 @@
     <script src="attraction-database.js"></script>
     <!-- 添加本地景點圖片資料庫 -->
     <script src="local-attraction-images.js"></script>
-    <!-- 添加交通卡資料庫 -->
-    <script src="transit-cards.js"></script>
+    <!-- 交通卡資料庫已移除 -->
     <!-- 添加智慧行程建議模組 -->
     <script src="smart-itinerary-recommender.js"></script>
     <script src="app.js"></script>
@@ -586,11 +591,8 @@
     <script src="smart-recommendation-ui.js"></script>
     <!-- 添加預算追蹤模組腳本 -->
     <script src="budget-tracker.js"></script>
-    <!-- 添加交通卡資訊模組腳本 -->
-    <script src="transit-card.js"></script>
-    <!-- 添加緊急聯絡資訊模組腳本 -->
-    <script src="emergency-contacts.js"></script>
-    <script src="emergency-contact.js"></script>
+    <!-- 交通卡資訊模組已移除 -->
+    <!-- 緊急聯絡資訊模組已移除 -->
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
@@ -603,57 +605,31 @@
             console.error('預算追蹤模組未找到');
         }
 
+        // 交通卡資訊模組已移除
 
 
-        // 測試交通延認按鈕
+
+        // 測試交通延誤按鈕
         const testTransportationDelayButton = document.getElementById('test-transportation-delay');
         if (testTransportationDelayButton) {
             testTransportationDelayButton.addEventListener('click', function() {
                 if (typeof testTransportationDelay === 'function') {
                     testTransportationDelay();
-                    console.log('交通延認測試已啟動');
+                    console.log('交通延誤測試已啟動');
                 } else {
-                    console.error('交通延認測試函數未找到');
-                    alert('交通延認測試函數未找到，請確保 transportation-delay-handler.js 已正確載入');
+                    console.error('交通延誤測試函數未找到');
+                    alert('交通延誤測試函數未找到，請確保 transportation-delay-handler.js 已正確載入');
                 }
             });
         }
 
-        // 測試交通卡資訊按鈕
-        const testTransitCardButton = document.getElementById('test-transit-card');
-        if (testTransitCardButton) {
-            testTransitCardButton.addEventListener('click', function() {
-                if (typeof TransitCardService !== 'undefined' && typeof TransitCardService.testTransitCardInfo === 'function') {
-                    TransitCardService.testTransitCardInfo();
-                    console.log('交通卡資訊測試已啟動');
-                } else {
-                    console.error('交通卡資訊測試函數未找到');
-                    alert('交通卡資訊測試函數未找到，請確保 transit-card.js 已正確載入');
-                }
-            });
-        }
+        // 交通卡資訊按鈕已移除
 
-        // 測試緊急聯絡資訊按鈕
-        const testEmergencyContactButton = document.getElementById('test-emergency-contact');
-        if (testEmergencyContactButton) {
-            testEmergencyContactButton.addEventListener('click', function() {
-                if (typeof EmergencyContact !== 'undefined' && typeof EmergencyContact.testEmergencyContact === 'function') {
-                    EmergencyContact.testEmergencyContact();
-                    console.log('緊急聯絡資訊測試已啟動');
-                } else {
-                    console.error('緊急聯絡資訊測試函數未找到');
-                    alert('緊急聯絡資訊測試函數未找到，請確保 emergency-contact.js 已正確載入');
-                }
-            });
-        }
-
-        // 初始化緊急聯絡資訊模組
-        if (typeof EmergencyContact !== 'undefined') {
-            EmergencyContact.init();
-            console.log('緊急聯絡資訊模組已初始化');
-        } else {
-            console.error('緊急聯絡資訊模組未找到');
-        }
+        // 緊急聯絡資訊模組已移除
     </script>
+    <!-- 測試按鈕區域，放置在頁面最下方 -->
+    <div class="test-buttons">
+        <button id="test-transportation-delay" class="test-button"><i class="fas fa-bus"></i> 測試交通延誤</button>
+    </div>
 </body>
 </html>
