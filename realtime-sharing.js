@@ -558,24 +558,115 @@ const RealtimeSharing = (function() {
         });
     }
 
+    // 手動設置全局變數
+    function manuallySetGlobalVariables(itineraryData) {
+        console.log('即時分享: 手動設置全局變數');
+
+        try {
+            // 直接設置全局變數
+            window.startingPoint = itineraryData.startingPoint;
+            window.destinations = itineraryData.destinations;
+            window.departureDate = itineraryData.departureDate;
+            window.departureTime = itineraryData.departureTime;
+            window.maxDailyHours = itineraryData.maxDailyHours;
+            window.dailySettings = itineraryData.dailySettings;
+            window.dailyEndPoints = itineraryData.dailyEndPoints;
+            window.locationCache = itineraryData.locationCache || {};
+
+            // 如果存在 exposeGlobalVariables 函數，也調用它
+            if (typeof window.exposeGlobalVariables === 'function') {
+                window.exposeGlobalVariables();
+            }
+
+            console.log('即時分享: 全局變數已手動設置');
+            return true;
+        } catch (error) {
+            console.error('即時分享: 手動設置全局變數時發生錯誤', error);
+            return false;
+        }
+    }
+
+    // 檢查全局變數是否正確暴露
+    function checkGlobalVariables() {
+        console.log('即時分享: 檢查全局變數是否正確暴露');
+
+        const variables = {
+            startingPoint: window.startingPoint,
+            destinations: window.destinations,
+            departureDate: window.departureDate,
+            departureTime: window.departureTime,
+            maxDailyHours: window.maxDailyHours,
+            updateItinerary: typeof window.updateItinerary === 'function',
+            updateMap: typeof window.updateMap === 'function',
+            notifyItineraryUpdated: typeof window.notifyItineraryUpdated === 'function'
+        };
+
+        console.log('全局變數狀態:', variables);
+
+        // 檢查必要的變數
+        if (!window.startingPoint) {
+            console.error('即時分享: 全局變數 startingPoint 不存在');
+            return false;
+        }
+
+        if (!window.destinations || !Array.isArray(window.destinations) || window.destinations.length === 0) {
+            console.error('即時分享: 全局變數 destinations 不存在或為空');
+            return false;
+        }
+
+        if (typeof window.updateItinerary !== 'function') {
+            console.error('即時分享: 全局函數 updateItinerary 不存在');
+            return false;
+        }
+
+        if (typeof window.updateMap !== 'function') {
+            console.error('即時分享: 全局函數 updateMap 不存在');
+            return false;
+        }
+
+        return true;
+    }
+
     // 載入分享的行程資料
     function loadSharedItineraryData(itineraryData) {
         if (!itineraryData) {
             console.error('行程資料為空');
+            alert('無法載入分享行程，行程資料為空。');
             return;
         }
 
-        console.log('正在載入分享的行程資料');
+        console.log('即時分享: 正在載入分享的行程資料', itineraryData);
 
-        // 載入行程資料
-        window.startingPoint = itineraryData.startingPoint;
-        window.destinations = itineraryData.destinations;
-        window.departureDate = itineraryData.departureDate;
-        window.departureTime = itineraryData.departureTime;
-        window.maxDailyHours = itineraryData.maxDailyHours;
-        window.dailySettings = itineraryData.dailySettings;
-        window.dailyEndPoints = itineraryData.dailyEndPoints;
-        window.locationCache = itineraryData.locationCache || {};
+        // 檢查必要的行程資料
+        if (!itineraryData.startingPoint) {
+            console.error('即時分享: 行程資料中缺少出發點');
+            alert('無法載入分享行程，行程資料中缺少出發點。');
+            return;
+        }
+
+        if (!itineraryData.destinations || !Array.isArray(itineraryData.destinations) || itineraryData.destinations.length === 0) {
+            console.error('即時分享: 行程資料中缺少景點');
+            alert('無法載入分享行程，行程資料中缺少景點。');
+            return;
+        }
+
+        try {
+            // 使用手動設置全局變數函數
+            if (!manuallySetGlobalVariables(itineraryData)) {
+                console.error('即時分享: 手動設置全局變數失敗');
+                alert('行程資料未正確載入，請重新載入頁面。');
+                return;
+            }
+
+            console.log('即時分享: 行程資料已載入到全局變數', {
+                startingPoint: window.startingPoint,
+                destinations: window.destinations
+            });
+        } catch (error) {
+            console.error('即時分享: 載入行程資料時發生錯誤', error);
+            alert('載入分享行程時發生錯誤。\n\n錯誤訊息: ' + error.message);
+            return;
+        }
 
         // 更新界面
         document.getElementById('starting-point').value = window.startingPoint.name;
@@ -597,10 +688,55 @@ const RealtimeSharing = (function() {
         document.getElementById('add-destination').disabled = false;
 
         // 更新地圖和行程
-        window.updateItinerary();
-        window.updateMap();
+        try {
+            console.log('即時分享: 嘗試更新行程和地圖...');
 
-        console.log('已載入分享的行程資料');
+            if (typeof window.updateItinerary === 'function') {
+                window.updateItinerary();
+                console.log('即時分享: 行程更新成功');
+            } else {
+                console.error('即時分享: updateItinerary 函數不存在');
+                alert('更新行程失敗，請重新載入頁面。');
+            }
+
+            if (typeof window.updateMap === 'function') {
+                window.updateMap();
+                console.log('即時分享: 地圖更新成功');
+            } else {
+                console.error('即時分享: updateMap 函數不存在');
+                alert('更新地圖失敗，請重新載入頁面。');
+            }
+
+            // 觸發行程更新事件，確保全局變數暴露
+            if (typeof window.notifyItineraryUpdated === 'function') {
+                window.notifyItineraryUpdated();
+                console.log('即時分享: 已觸發行程更新事件');
+            }
+
+            // 檢查全局變數是否正確暴露
+            if (!checkGlobalVariables()) {
+                console.error('即時分享: 全局變數未正確暴露，嘗試手動暴露');
+
+                // 手動設置全局變數
+                if (manuallySetGlobalVariables(itineraryData)) {
+                    console.log('即時分享: 已手動設置全局變數');
+
+                    // 再次檢查
+                    if (!checkGlobalVariables()) {
+                        console.error('即時分享: 即使手動設置後，全局變數仍然未正確暴露');
+                        alert('行程資料未正確載入，請重新載入頁面。');
+                    }
+                } else {
+                    console.error('即時分享: 手動設置全局變數失敗');
+                    alert('行程資料未正確載入，請重新載入頁面。');
+                }
+            }
+
+            console.log('即時分享: 已載入分享的行程資料');
+        } catch (error) {
+            console.error('即時分享: 更新行程和地圖時發生錯誤', error);
+            alert('更新行程和地圖時發生錯誤。\n\n錯誤訊息: ' + error.message);
+        }
     }
 
     // 連接到分享的行程
@@ -633,11 +769,21 @@ const RealtimeSharing = (function() {
         }
 
         // 首先檢查分享的行程是否存在
+        console.log('即時分享: 檢查分享行程是否存在, ID:', shareId);
+
         FirebaseService.getRef(`shared_itineraries/${shareId}`).once('value', snapshot => {
             const sharedItinerary = snapshot.val();
+            console.log('即時分享: 從 Firebase 獲取的行程資料:', sharedItinerary);
 
             if (!sharedItinerary) {
-                alert('找不到即時分享的行程！');
+                console.error('即時分享: 找不到分享行程, ID:', shareId);
+                alert('找不到即時分享的行程！可能已被刪除或分享 ID 無效。');
+                return;
+            }
+
+            if (!sharedItinerary.itineraryData) {
+                console.error('即時分享: 分享行程資料不完整, ID:', shareId);
+                alert('分享行程資料不完整，無法載入。');
                 return;
             }
 
@@ -871,7 +1017,16 @@ const RealtimeSharing = (function() {
         setCurrentUser: function(user) {
             currentUser = user;
             saveUserData();
-        }
+        },
+
+        // 載入分享的行程資料（用於測試）
+        loadSharedItineraryData: loadSharedItineraryData,
+
+        // 檢查全局變數（用於測試）
+        checkGlobalVariables: checkGlobalVariables,
+
+        // 手動設置全局變數（用於測試）
+        manuallySetGlobalVariables: manuallySetGlobalVariables
     };
 })();
 

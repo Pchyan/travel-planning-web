@@ -36,13 +36,23 @@ function createFirebaseTestButton() {
     realtimeTestButton.innerHTML = '<i class="fas fa-share-alt"></i> 測試即時同步';
     realtimeTestButton.style.marginLeft = '10px';
 
+    // 創建測試載入分享行程按鈕
+    const testLoadShareButton = document.createElement('button');
+    testLoadShareButton.id = 'test-load-share';
+    testLoadShareButton.className = 'test-button';
+    testLoadShareButton.style.backgroundColor = '#fd7e14';
+    testLoadShareButton.innerHTML = '<i class="fas fa-download"></i> 測試載入分享行程';
+    testLoadShareButton.style.marginLeft = '10px';
+
     // 添加按鈕到測試區域
     testButtonsContainer.appendChild(testButton);
     testButtonsContainer.appendChild(realtimeTestButton);
+    testButtonsContainer.appendChild(testLoadShareButton);
 
     // 添加點擊事件
     testButton.addEventListener('click', testFirebaseConnection);
     realtimeTestButton.addEventListener('click', testRealtimeShare);
+    testLoadShareButton.addEventListener('click', testLoadSharedItinerary);
 }
 
 // 測試 Firebase 連接
@@ -127,5 +137,53 @@ function testRealtimeShare() {
     } catch (error) {
         console.error('創建即時分享時發生錯誤:', error);
         alert('創建即時分享時發生錯誤\n\n' + error.message);
+    }
+}
+
+// 測試載入分享行程
+function testLoadSharedItinerary() {
+    console.log('測試載入分享行程...');
+
+    // 檢查 RealtimeSharing 模組是否存在
+    if (typeof RealtimeSharing === 'undefined') {
+        console.error('RealtimeSharing 模組未載入');
+        alert('RealtimeSharing 模組未載入，無法測試載入分享行程');
+        return;
+    }
+
+    // 創建測試行程資料
+    const testItineraryData = {
+        startingPoint: {
+            name: '測試出發點',
+            coordinates: [25.0330, 121.5654] // 台北市座標
+        },
+        destinations: [
+            {
+                name: '測試景點 1',
+                coordinates: [25.0375, 121.5637],
+                stayDuration: 2
+            },
+            {
+                name: '測試景點 2',
+                coordinates: [25.0428, 121.5448],
+                stayDuration: 1.5
+            }
+        ],
+        departureDate: '2023-12-31',
+        departureTime: '09:00',
+        maxDailyHours: 8,
+        dailySettings: {},
+        dailyEndPoints: [],
+        locationCache: {}
+    };
+
+    try {
+        // 直接調用 loadSharedItineraryData 函數
+        console.log('嘗試載入測試行程資料...');
+        RealtimeSharing.loadSharedItineraryData(testItineraryData);
+        alert('測試行程資料已載入，請檢查地圖和行程是否正確顯示。');
+    } catch (error) {
+        console.error('載入測試行程資料時發生錯誤:', error);
+        alert('載入測試行程資料時發生錯誤\n\n' + error.message);
     }
 }
