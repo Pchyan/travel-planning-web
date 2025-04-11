@@ -1859,37 +1859,61 @@ document.addEventListener('DOMContentLoaded', function() {
     exposeGlobalVariables();
 
     // 即時同步按鈕事件
+    // 注意: 即時同步按鈕事件現在由 realtime-sharing-wrapper.js 處理
     const realtimeShareButton = document.getElementById('realtime-share');
     if (realtimeShareButton) {
         // 確保按鈕不被禁用
         realtimeShareButton.disabled = false;
         realtimeShareButton.title = '即時同步分享行程';
 
-        realtimeShareButton.addEventListener('click', function() {
-            if (typeof RealtimeSharing === 'undefined') {
-                console.error('即時同步模組未載入');
-                alert('即時同步功能無法使用，請重新載入頁面後再試。');
-                return;
+        // 注意: 我們不在這裡添加點擊事件，因為它已經在 realtime-sharing-wrapper.js 中處理
+        console.log('即時同步按鈕已初始化，事件由 realtime-sharing-wrapper.js 處理');
+    }
+
+    // Firebase 設定按鈕事件
+    const firebaseSettingsButton = document.getElementById('firebase-settings');
+    if (firebaseSettingsButton) {
+        firebaseSettingsButton.addEventListener('click', function() {
+            // 檢查是否有自定義配置
+            const hasCustomConfig = typeof FirebaseService !== 'undefined' && FirebaseService.hasCustomConfig ? FirebaseService.hasCustomConfig() : false;
+
+            // 根據是否有自定義配置設置按鈕樣式
+            if (hasCustomConfig) {
+                firebaseSettingsButton.innerHTML = '<i class="fas fa-cog"></i> Firebase 設定 <span class="custom-config-badge" style="background-color: #28a745; color: white; font-size: 10px; padding: 2px 5px; border-radius: 10px; margin-left: 5px;">已設定</span>';
             }
 
-            try {
-                // 檢查是否有行程可分享
-                if (!startingPoint) {
-                    alert('請先設置出發點再進行即時同步分享！');
-                    return;
-                }
+            // 開啟 Firebase 設定頁面
+            window.open('firebase-settings.html', '_blank');
+        });
 
-                if (!destinations || destinations.length === 0) {
-                    alert('請先添加至少一個景點再進行即時同步分享！');
-                    return;
-                }
+        // 檢查是否有自定義配置，並更新按鈕樣式
+        if (typeof FirebaseService !== 'undefined' && FirebaseService.hasCustomConfig && FirebaseService.hasCustomConfig()) {
+            firebaseSettingsButton.innerHTML = '<i class="fas fa-cog"></i> Firebase 設定 <span class="custom-config-badge" style="background-color: #28a745; color: white; font-size: 10px; padding: 2px 5px; border-radius: 10px; margin-left: 5px;">已設定</span>';
+        }
+    }
 
-                // 創建即時分享
-                RealtimeSharing.createRealtimeShare();
-            } catch (error) {
-                console.error('創建即時分享時發生錯誤:', error);
-                alert('創建即時分享時發生錯誤\n\n' + error.message);
-            }
+    // Firebase 測試按鈕事件
+    const firebaseTestButton = document.getElementById('firebase-test');
+    if (firebaseTestButton) {
+        firebaseTestButton.addEventListener('click', function() {
+            // 開啟 Firebase 測試頁面
+            window.open('firebase-test.html', '_blank');
+        });
+
+        // 檢查 Firebase 連接狀態，並更新按鈕樣式
+        if (typeof FirebaseService !== 'undefined' && FirebaseService.isConnected && FirebaseService.isConnected()) {
+            firebaseTestButton.innerHTML = '<i class="fas fa-vial"></i> 測試連接 <span class="custom-config-badge" style="background-color: #28a745; color: white; font-size: 10px; padding: 2px 5px; border-radius: 10px; margin-left: 5px;">已連接</span>';
+        } else {
+            firebaseTestButton.innerHTML = '<i class="fas fa-vial"></i> 測試連接 <span class="custom-config-badge" style="background-color: #dc3545; color: white; font-size: 10px; padding: 2px 5px; border-radius: 10px; margin-left: 5px;">未連接</span>';
+        }
+
+        // 監聽 Firebase 連接狀態變化
+        window.addEventListener('firebase-connected', function() {
+            firebaseTestButton.innerHTML = '<i class="fas fa-vial"></i> 測試連接 <span class="custom-config-badge" style="background-color: #28a745; color: white; font-size: 10px; padding: 2px 5px; border-radius: 10px; margin-left: 5px;">已連接</span>';
+        });
+
+        window.addEventListener('firebase-disconnected', function() {
+            firebaseTestButton.innerHTML = '<i class="fas fa-vial"></i> 測試連接 <span class="custom-config-badge" style="background-color: #dc3545; color: white; font-size: 10px; padding: 2px 5px; border-radius: 10px; margin-left: 5px;">未連接</span>';
         });
     }
 

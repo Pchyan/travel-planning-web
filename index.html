@@ -17,18 +17,99 @@
     <link rel="stylesheet" href="travel-record.css" />
     <!-- 添加天氣服務模組樣式 -->
     <link rel="stylesheet" href="weather-styles.css" />
-    <!-- 交通卡資訊模組已移除 -->
     <!-- 添加智慧行程建議模組樣式 -->
     <link rel="stylesheet" href="smart-recommendation.css" />
     <!-- 添加預算追蹤模組樣式 -->
     <link rel="stylesheet" href="budget-tracker.css" />
-    <!-- 緊急聯絡資訊模組已移除 -->
-
 
     <style>
         /* 添加 .hidden 類 */
         .hidden {
             display: none !important;
+        }
+
+        /* 預算追蹤對話框樣式 */
+        .budget-tracker-dialog {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            overflow-y: auto;
+        }
+
+        .budget-tracker-dialog.active {
+            display: flex !important;
+        }
+        
+        .budget-tracker-panel {
+            background-color: white;
+            width: 90%;
+            max-width: 900px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh;
+            overflow: hidden;
+        }
+        
+        .budget-tracker-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #4a89dc;
+            color: white;
+        }
+        
+        .budget-tracker-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .budget-tracker-tabs {
+            display: flex;
+            background-color: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .budget-tracker-tab {
+            padding: 12px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+        }
+        
+        .budget-tracker-tab.active {
+            color: #4a89dc;
+            border-bottom: 2px solid #4a89dc;
+            background-color: white;
+        }
+        
+        .budget-tracker-content {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .budget-tracker-section {
+            display: none;
+        }
+        
+        .budget-tracker-section.active {
+            display: block;
         }
 
         /* 測試按鈕區域樣式 - 頁面底部 */
@@ -149,11 +230,6 @@
                     <button id="open-travel-record" title="查看和管理您的旅行記錄"><i class="fas fa-book"></i> 旅行記錄</button>
                     <!-- 添加預算追蹤按鈕 -->
                     <button id="open-budget-tracker" title="設定和追蹤您的旅行預算"><i class="fas fa-money-bill-wave"></i> 預算追蹤</button>
-                    <!-- 添加行程分享按鈕 -->
-                    <button id="share-itinerary" title="分享行程給朋友"><i class="fas fa-share-alt"></i> 分享行程</button>
-                    <button id="collaborate-itinerary" title="查看協作者和評論"><i class="fas fa-users"></i> 協作與評論</button>
-                    <button id="realtime-share" title="即時同步分享行程"><i class="fas fa-sync-alt"></i> 即時同步</button>
-                    <!-- 緊急聯絡資訊按鈕已移除 -->
                 </div>
 
                 <div class="add-destination">
@@ -236,8 +312,6 @@
         </footer>
     </div>
 
-
-
     <!-- 智慧行程建議對話框 -->
     <div id="recommendation-dialog" class="recommendation-dialog hidden">
         <div class="recommendation-panel">
@@ -257,27 +331,20 @@
                     <div class="preferences-form">
                         <div class="preference-group">
                             <label for="travel-style">旅遊風格</label>
-                            <select id="travel-style" multiple>
-                                <!-- 將由 JavaScript 動態填充 -->
-                            </select>
+                            <select id="travel-style" multiple></select>
                         </div>
                         <div class="preference-group">
                             <label for="preferred-types">偏好景點類型</label>
-                            <select id="preferred-types" multiple>
-                                <!-- 將由 JavaScript 動態填充 -->
-                            </select>
+                            <select id="preferred-types" multiple></select>
                         </div>
                         <div class="preference-group">
                             <label for="avoid-types">避免景點類型</label>
-                            <select id="avoid-types" multiple>
-                                <!-- 將由 JavaScript 動態填充 -->
-                            </select>
+                            <select id="avoid-types" multiple></select>
                         </div>
                         <div class="preference-group">
                             <label for="travel-season">旅遊季節</label>
                             <select id="travel-season">
                                 <option value="">當前季節</option>
-                                <!-- 將由 JavaScript 動態填充 -->
                             </select>
                         </div>
                         <div class="preference-group">
@@ -312,15 +379,11 @@
                         </div>
                         <div class="preference-group">
                             <label for="preferred-countries">偏好國家</label>
-                            <select id="preferred-countries" multiple>
-                                <!-- 將由 JavaScript 動態填充 -->
-                            </select>
+                            <select id="preferred-countries" multiple></select>
                         </div>
                         <div class="preference-group">
                             <label for="preferred-cities">偏好城市</label>
-                            <select id="preferred-cities" multiple>
-                                <!-- 將由 JavaScript 動態填充 -->
-                            </select>
+                            <select id="preferred-cities" multiple></select>
                         </div>
                     </div>
                     <div class="preference-buttons">
@@ -352,8 +415,13 @@
         </div>
     </div>
 
+    <!-- 旅行記錄對話框 -->
+    <div id="travel-record-dialog" class="travel-record-dialog hidden">
+        <!-- 這裡是旅行記錄對話框的內容 -->
+    </div>
+
     <!-- 預算追蹤對話框 -->
-    <div id="budget-tracker-dialog" class="budget-tracker-dialog">
+    <div id="budget-tracker-dialog" class="budget-tracker-dialog hidden">
         <div class="budget-tracker-panel">
             <div class="budget-tracker-header">
                 <h2>旅行預算追蹤</h2>
@@ -565,50 +633,24 @@
         </div>
     </div>
 
-    <!-- 測試按鈕已移動到頁面底部 -->
-
     <!-- Leaflet 地圖庫 -->
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-
-    <!-- 測試 Firebase 是否載入成功 -->
     <script>
-        window.addEventListener('DOMContentLoaded', function() {
+        // 確保 DOM 完全載入後執行
+        document.addEventListener('DOMContentLoaded', function() {
+            // 延遲檢查 Firebase SDK 載入是否成功
             setTimeout(function() {
-                if (typeof firebase === 'undefined') {
-                    console.error('Firebase SDK 未成功載入，嘗試從備用來源載入');
-                    // 從備用來源載入 Firebase SDK
-                    var script1 = document.createElement('script');
-                    script1.src = 'https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-app-compat.js';
-                    document.head.appendChild(script1);
-
-                    var script2 = document.createElement('script');
-                    script2.src = 'https://cdn.jsdelivr.net/npm/firebase@10.7.1/firebase-database-compat.js';
-                    document.head.appendChild(script2);
-
-                    // 在備用 SDK 載入後再次載入配置
-                    script2.onload = function() {
-                        var configScript = document.createElement('script');
-                        configScript.src = 'firebase-config.js';
-                        document.head.appendChild(configScript);
-                    };
-                } else {
-                    console.log('Firebase SDK 已成功載入');
-                }
+                // 在 Firebase 相關功能已被移除的情況下，這裡不再做檢查
+                console.log('頁面已完全載入');
             }, 1000); // 等待 1 秒確保頁面已完全載入
         });
     </script>
 
-    <script src="firebase-config.js"></script>
-
     <!-- QR 碼生成器 -->
     <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
-    <!-- QR 碼生成器輔助工具 -->
-    <script src="qrcode-helper.js"></script>
-
+    
     <!-- 專案腳本 -->
     <script src="transportationSystems.js"></script>
     <!-- 添加天氣服務模組腳本 -->
@@ -624,24 +666,16 @@
     <script src="attraction-database.js"></script>
     <!-- 添加本地景點圖片資料庫 -->
     <script src="local-attraction-images.js"></script>
-    <!-- 交通卡資料庫已移除 -->
     <!-- 添加智慧行程建議模組 -->
     <script src="smart-itinerary-recommender.js"></script>
+    <!-- 添加預算追蹤模組腳本 -->
+    <script src="budget-tracker.js"></script>
+    <!-- 主應用程式腳本 -->
     <script src="app.js"></script>
     <!-- 添加旅行記錄模組腳本 -->
     <script src="travel-record.js"></script>
     <!-- 添加智慧行程建議 UI 控制器 -->
     <script src="smart-recommendation-ui.js"></script>
-    <!-- 添加預算追蹤模組腳本 -->
-    <script src="budget-tracker.js"></script>
-    <!-- 添加行程分享模組腳本 -->
-    <script src="itinerary-sharing.js"></script>
-    <!-- 添加即時同步行程分享模組腳本 -->
-    <script src="realtime-sharing.js"></script>
-    <!-- 添加 Firebase 測試工具 -->
-    <script src="firebase-test.js"></script>
-    <!-- 交通卡資訊模組已移除 -->
-    <!-- 緊急聯絡資訊模組已移除 -->
     <script>
         // 自動更新頁腳年份
         document.getElementById('current-year').textContent = new Date().getFullYear();
@@ -653,10 +687,6 @@
         } else {
             console.error('預算追蹤模組未找到');
         }
-
-        // 交通卡資訊模組已移除
-
-
 
         // 測試交通延誤按鈕
         const testTransportationDelayButton = document.getElementById('test-transportation-delay');
@@ -671,8 +701,6 @@
                 }
             });
         }
-
-        // 交通卡資訊按鈕已移除
 
         // 顯示行程狀態按鈕
         const debugItineraryButton = document.getElementById('debug-itinerary');
@@ -692,12 +720,27 @@
                 alert(`當前行程狀態:\n\n出發點: ${status.startingPoint ? status.startingPoint.name : '未設置'}\n景點數量: ${status.destinationsLength}\n出發日期: ${status.departureDate || '未設置'}\n出發時間: ${status.departureTime || '未設置'}\n每日行程時間: ${status.maxDailyHours || '未設置'} 小時`);
             });
         }
-
-        // 緊急聯絡資訊模組已移除
     </script>
     <!-- 測試按鈕區域，放置在頁面最下方 -->
     <div class="test-buttons">
         <button id="test-transportation-delay" class="test-button"><i class="fas fa-bus"></i> 測試交通延誤</button>
+        <button id="test-budget-tracker" class="test-button"><i class="fas fa-money-bill-wave"></i> 測試預算追蹤</button>
     </div>
+
+    <script>
+        // 測試預算追蹤面板
+        document.getElementById('test-budget-tracker').addEventListener('click', function() {
+            console.log('測試預算追蹤按鈕被點擊');
+            const dialog = document.getElementById('budget-tracker-dialog');
+            if (dialog) {
+                console.log('找到預算追蹤對話框');
+                dialog.classList.add('active');
+                dialog.classList.remove('hidden');
+                console.log('已直接添加 active 類和移除 hidden 類');
+            } else {
+                console.error('找不到預算追蹤對話框元素');
+            }
+        });
+    </script>
 </body>
 </html>

@@ -292,7 +292,7 @@ const BudgetTracker = (function() {
 
     // 開啟預算追蹤面板
     function openBudgetTracker() {
-        console.log('開啟預算追蹤面板');
+        console.log('開啟預算追蹤面板 - 函數被調用');
 
         // 獲取當前行程ID
         const currentItineraryId = getCurrentItineraryId();
@@ -300,7 +300,10 @@ const BudgetTracker = (function() {
         // 顯示預算追蹤對話框
         const dialog = document.getElementById('budget-tracker-dialog');
         if (dialog) {
+            console.log('找到預算追蹤對話框元素');
             dialog.classList.add('active');
+            dialog.classList.remove('hidden');  // 同時移除 hidden 類
+            console.log('已添加 active 類和移除 hidden 類');
 
             // 更新預算追蹤面板內容
             updateBudgetTrackerContent(currentItineraryId);
@@ -423,60 +426,6 @@ const BudgetTracker = (function() {
         // 更新所有支出列表
         updateAllExpensesList(itineraryId);
     }
-
-    // 更新最近支出列表
-    function updateRecentExpensesList(itineraryId) {
-        const recentExpensesContainer = document.getElementById('recent-expenses-list');
-        if (!recentExpensesContainer) return;
-
-        // 清除現有內容
-        recentExpensesContainer.innerHTML = '';
-
-        // 獲取行程的支出
-        const itineraryExpenses = expenses[itineraryId] || [];
-
-        // 如果沒有支出，顯示提示訊息
-        if (itineraryExpenses.length === 0) {
-            recentExpensesContainer.innerHTML = '<div class="no-expenses">沒有支出記錄</div>';
-            return;
-        }
-
-        // 排序支出，最近的先顯示
-        const sortedExpenses = [...itineraryExpenses].sort((a, b) => {
-            return new Date(b.date) - new Date(a.date);
-        });
-
-        // 只顯示最近的5筆支出
-        const recentExpenses = sortedExpenses.slice(0, 5);
-
-        // 獲取預算資料以格式化貨幣
-        const budget = budgets[itineraryId];
-        const currency = budget ? budget.currency : 'TWD';
-
-        // 創建支出列表
-        recentExpenses.forEach(expense => {
-            const expenseElement = document.createElement('div');
-            expenseElement.className = 'expense-item';
-
-            expenseElement.innerHTML = `
-                <div class="expense-name">${expense.name}</div>
-                <div class="expense-amount">${formatCurrency(expense.amount, currency)}</div>
-                <div class="expense-category">${expense.category}</div>
-                <div class="expense-date">${formatDate(expense.date)}</div>
-                <div class="expense-actions">
-                    <button class="edit-expense" data-id="${expense.id}" title="編輯支出"><i class="fas fa-edit"></i></button>
-                    <button class="delete-expense" data-id="${expense.id}" title="刪除支出"><i class="fas fa-trash"></i></button>
-                </div>
-            `;
-
-            recentExpensesContainer.appendChild(expenseElement);
-        });
-
-        // 綁定編輯和刪除按鈕事件
-        bindExpenseActions(recentExpensesContainer, itineraryId);
-    }
-
-
 
     // 更新最近支出列表
     function updateRecentExpensesList(itineraryId) {
@@ -1285,3 +1234,37 @@ const BudgetTracker = (function() {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = BudgetTracker;
 }
+
+// 立即執行函數，確保模組被載入後立即初始化
+(function() {
+    // 等待DOM加載完成
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM加載完成，開始初始化預算追蹤模組...');
+            BudgetTracker.init();
+
+            // 確保按鈕事件被正確綁定
+            const budgetButton = document.getElementById('open-budget-tracker');
+            if (budgetButton) {
+                budgetButton.removeEventListener('click', BudgetTracker.openBudgetTracker);
+                budgetButton.addEventListener('click', function() {
+                    console.log('預算追蹤按鈕被點擊（自動重新綁定）');
+                    const dialog = document.getElementById('budget-tracker-dialog');
+                    if (dialog) {
+                        dialog.classList.add('active');
+                        dialog.classList.remove('hidden');
+                        // 更新預算追蹤面板內容
+                        BudgetTracker.updateBudgetTrackerContent(BudgetTracker.getCurrentItineraryId());
+                    } else {
+                        console.error('找不到預算追蹤對話框元素（自動重新綁定）');
+                    }
+                });
+                console.log('已直接重新綁定預算追蹤按鈕事件');
+            }
+        });
+    } else {
+        // 如果DOM已經載入完成，直接初始化
+        console.log('DOM已加載，直接初始化預算追蹤模組...');
+        BudgetTracker.init();
+    }
+})();

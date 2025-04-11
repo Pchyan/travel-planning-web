@@ -723,7 +723,111 @@ footer {
     margin-bottom: 5px;
 }
 
+/* 協作者游標樣式 */
+.collaborator-cursor {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    transition: transform 0.1s ease-out;
+}
 
+.cursor-pointer {
+    width: 10px;
+    height: 10px;
+    background: #ff4444;
+    border-radius: 50%;
+    position: absolute;
+}
 
+.cursor-label {
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    margin-left: 15px;
+    margin-top: -10px;
+    white-space: nowrap;
+}
 
+/* 同步狀態樣式 */
+.sync-status {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 8px 15px;
+    border-radius: 4px;
+    font-size: 14px;
+    z-index: 1000;
+}
 
+.sync-status.connected {
+    background: #4CAF50;
+    color: white;
+}
+
+.sync-status.connecting {
+    background: #FFC107;
+    color: black;
+}
+
+.sync-status.offline {
+    background: #9E9E9E;
+    color: white;
+}
+
+.sync-status.error {
+    background: #F44336;
+    color: white;
+}
+
+/* 同步錯誤提示 */
+.sync-error {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #F44336;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    animation: fadeIn 0.3s ease-out;
+    z-index: 1001;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 協作者列表 */
+.collaborators-list {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 10px;
+    z-index: 1000;
+}
+
+.collaborator-item {
+    display: flex;
+    align-items: center;
+    margin: 5px 0;
+}
+
+.collaborator-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-online {
+    background: #4CAF50;
+}
+
+.status-offline {
+    background: #9E9E9E;
+}
